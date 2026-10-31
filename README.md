@@ -10,9 +10,24 @@ npm test
 npm run dev
 ```
 
-The dev server listens on [http://127.0.0.1:4317](http://127.0.0.1:4317).
+The dev server listens on [http://127.0.0.1:4317](http://127.0.0.1:4317). That port is only for local development. The production build does not use it.
 
-`npm run build` typechecks and writes a production bundle to `dist/`. `npm run lint` runs oxlint.
+`npm run build` typechecks and writes a static site to `dist/`. `npm run lint` runs oxlint.
+
+## Deploy on Vercel
+
+The site is a static Vite build. Import the Origin repo and use:
+
+| Setting | Value |
+| --- | --- |
+| Framework preset | Vite |
+| Root directory | repository root |
+| Build command | `npm run build` |
+| Output directory | `dist` |
+| Install command | default (`npm install`) |
+| Node.js version | 22.x |
+
+No environment variables. `vercel.json` sets the same build command and output directory, and rewrites unknown paths to `index.html`. Assets are emitted from the site root (`/assets/...`).
 
 ## How a session works
 
