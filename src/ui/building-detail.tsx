@@ -5,6 +5,7 @@ import { explainBuild } from '@/game/sim/buildings.ts'
 import {
   buildCost,
   buildTimeMs,
+  effectiveLevels,
   populationCapacity,
   productionPerHour,
   requirementText,
@@ -31,10 +32,11 @@ export function BuildingDetail({
   if (!town) return null
   const def = BUILDINGS[id]
   const level = town.buildings[id]
-  const maxed = level >= def.maxLevel
+  const planned = effectiveLevels(town)[id]
+  const maxed = planned >= def.maxLevel
   const reason = maxed ? null : explainBuild(town, id)
-  const cost = maxed ? null : buildCost(id, level + 1)
-  const time = maxed ? 0 : buildTimeMs(id, level + 1, town.buildings.headquarters)
+  const cost = maxed ? null : buildCost(id, planned + 1)
+  const time = maxed ? 0 : buildTimeMs(id, planned + 1, town.buildings.headquarters)
   const req = requirementText(id)
   const queued = town.buildQueue.some((job) => job.buildingId === id)
   const Title = titleAs === 'dialog' ? DialogTitle : 'h3'
@@ -60,7 +62,7 @@ export function BuildingDetail({
       )}
       <div className="mt-3">
         <Button size="sm" disabled={maxed || reason != null} onClick={() => onBuild(id)}>
-          {maxed ? 'Finished' : `Raise to ${level + 1}`}
+          {maxed ? 'Finished' : `Raise to ${planned + 1}`}
         </Button>
         {reason ? <p className="mt-2 text-xs text-blood">{reason}</p> : null}
       </div>
