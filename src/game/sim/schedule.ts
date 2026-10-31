@@ -1,7 +1,40 @@
 import { AI_CONFIG, type Chronotype, type Difficulty, type Personality } from '../config/ai.ts'
 import { GAME_HOUR_MS, GAME_MINUTE_MS } from './time.ts'
 import { clamp, lerp, type Rng } from './rng.ts'
-import type { BotSchedule, Owner, Phase } from './types.ts'
+import type { BotSchedule, GameState, Owner, Phase } from './types.ts'
+
+/** Wall-clock instant the bot schedule should read. Compressed mode uses game time. */
+export function botScheduleNow(state: Pick<GameState, 'botClock' | 'gameTime'>, realNow: number, gameNow = state.gameTime): number {
+  return state.botClock === 'compressed' ? gameNow : realNow
+}
+
+export function gameInstantToSchedule(state: Pick<GameState, 'botClock' | 'speed'>, gameInstant: number, gameNow: number, scheduleNow: number): number {
+  if (state.botClock === 'compressed') return gameInstant
+  return scheduleNow + (gameInstant - gameNow) / state.speed
+}
+
+export function gameSpanToSchedule(state: Pick<GameState, 'botClock' | 'speed'>, gameSpanMs: number): number {
+  if (state.botClock === 'compressed') return gameSpanMs
+  return gameSpanMs / state.speed
+}
+
+export function scheduleInstantToGame(
+  state: Pick<GameState, 'botClock' | 'speed'>,
+  scheduleInstant: number,
+  anchor: { game: number; real: number; speed: number },
+): number {
+  if (state.botClock === 'compressed') return scheduleInstant
+  return Math.round(anchor.game + (scheduleInstant - anchor.real) * anchor.speed)
+}
+
+export function scheduleNowFromGame(
+  state: Pick<GameState, 'botClock'>,
+  gameInstant: number,
+  anchor: { game: number; real: number; speed: number },
+): number {
+  if (state.botClock === 'compressed') return gameInstant
+  return anchor.real + (gameInstant - anchor.game) / anchor.speed
+}
 
 export function localHour(gameTimeMs: number, offsetHours: number): number {
   const hours = gameTimeMs / GAME_HOUR_MS + offsetHours
@@ -230,9 +263,9 @@ export function habitBlurb(schedule: BotSchedule): string {
   const sleep = `${formatClock(schedule.sleepStartHour)}–${formatClock(schedule.sleepEndHour)}`
   const shift =
     Math.abs(schedule.timezoneOffsetHours) < 0.25
-      ? 'Their day matches the realm clock.'
-      : `Their day runs ${Math.abs(schedule.timezoneOffsetHours)}h ${schedule.timezoneOffsetHours > 0 ? 'ahead of' : 'behind'} the realm clock.`
-  return `Keeps the hours of ${manner}. Usually asleep ${sleep}, their time. ${shift}`
+      ? 'Their clock matches UTC.'
+      : `Their clock is UTC${schedule.timezoneOffsetHours > 0 ? '+' : ''}${schedule.timezoneOffsetHours}.`
+  return `Keeps the hours of ${manner}. Usually asleep ${sleep}, real time, not the sped-up realm clock. ${shift}`
 }
 
 export function presence(
@@ -253,6 +286,43 @@ export function presence(
     label = 'At the table'
   } else if (phase === 'busy') label = 'Busy. Checks in rarely.'
   return { phase, label, local }
+}
+
+/** Schedule-clock "now" for the current game instant. Uses the step anchor while the sim is replaying. */
+export function currentScheduleNow(
+  state: Pick<GameState, 'botClock' | 'gameTime' | 'lastRealMs' | 'clockAnchor'>,
+): number {
+  if (state.clockAnchor) return scheduleNowFromGame(state, state.gameTime, state.clockAnchor)
+  return botScheduleNow(state, state.lastRealMs, state.gameTime)
+}
+
+/**
+ * A sleeping lord may sit up for an alarm on their own town or a neighbor's call.
+ * Casual lords (wakeOnAlert 0) never do. The visit is scheduled after a groggy delay
+ * and only if they can still act before `deadlineSchedule`. A sooner natural login wins.
+ */
+export function considerAlertWake(state: GameState, owner: Owner, deadlineSchedule: number, rng: Rng): boolean {
+  if (owner.kind !== 'bot' || !owner.schedule || !owner.traits) return false
+  if (owner.traits.wakeOnAlert <= 0) return false
+  const now = currentScheduleNow(state)
+  if (phaseAt(owner.schedule, now) !== 'sleep') return false
+  if (owner.sessionEndsAt != null && owner.sessionEndsAt > now) return false
+  if (rng() >= owner.traits.wakeOnAlert) return false
+  const groggyMin = lerp(AI_CONFIG.alertGroggyMin[0], AI_CONFIG.alertGroggyMin[1], rng())
+  const groggy = Math.max(GAME_MINUTE_MS, Math.round(groggyMin * GAME_MINUTE_MS))
+  const wakeAt = now + groggy
+  const clickSlack = Math.round(AI_CONFIG.alertClickMin[1] * GAME_MINUTE_MS)
+  if (wakeAt + clickSlack >= deadlineSchedule) return false
+  if (owner.nextLoginAt != null && owner.nextLoginAt <= wakeAt) return false
+  owner.nextLoginAt = wakeAt
+  owner.wokenByAlert = true
+  return true
+}
+
+export function alarmBlurb(wakeOnAlert: number): string {
+  if (wakeOnAlert >= 0.8) return 'Keeps alarms on.'
+  if (wakeOnAlert >= 0.35) return 'Sometimes wakes for alarms.'
+  return 'Sleeps through alarms.'
 }
 
 export function presetSleep(chronotype: Chronotype): { start: number; end: number } {

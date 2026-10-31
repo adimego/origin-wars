@@ -236,9 +236,16 @@ function blankOwner(id: string, name: string, kind: Owner['kind']): Owner {
   }
 }
 
-export function newGame(opts: { speed: number; seed: number; realNow: number; playerName: string }): GameState {
+export function newGame(opts: {
+  speed: number
+  seed: number
+  realNow: number
+  playerName: string
+  botClock?: 'real' | 'compressed'
+}): GameState {
   const state: GameState = {
-    version: 2,
+    version: 3,
+    botClock: opts.botClock ?? 'real',
     seed: opts.seed >>> 0,
     rngState: (opts.seed || 1) >>> 0,
     speed: opts.speed,
@@ -287,7 +294,8 @@ export function newGame(opts: { speed: number; seed: number; realNow: number; pl
       schedule: rolled.schedule,
       traits: rolled.traits,
     }
-    owner.nextLoginAt = nextLoginAt(rolled.schedule, state.gameTime, rng)
+    const scheduleOrigin = state.botClock === 'compressed' ? state.gameTime : opts.realNow
+    owner.nextLoginAt = nextLoginAt(rolled.schedule, scheduleOrigin, rng)
     state.owners.push(owner)
     const town = baseTown(state, townName(rng, used), at.x, at.y, owner.id)
     developBot(town, slot.personality, slot.difficulty, rng)

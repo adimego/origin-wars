@@ -45,6 +45,8 @@ export interface BotTraits {
   playerBias: number
   weakBias: number
   targetNoise: number
+  /** Chance, while asleep, of sitting up for an alarm on their own town or an aid call. 0 sleeps through. 1 keeps the phone on. */
+  wakeOnAlert: number
   preferredUnits: UnitId[]
   buildWeights: Record<BuildingId, number>
   targetStyle: Personality
@@ -81,6 +83,8 @@ export interface Owner {
   nextLoginAt: number | null
   lastLoginAt: number | null
   sessionEndsAt: number | null
+  /** Set when an alarm pulled the next login forward. Cleared once they sit up. */
+  wokenByAlert?: boolean
   orders: BotOrder[]
 }
 
@@ -224,13 +228,22 @@ export interface Report {
   siegeEndsAt?: number | null
 }
 
+export type BotClockMode = 'real' | 'compressed'
+
 export interface GameState {
-  version: 2
+  version: 3
   seed: number
   rngState: number
   speed: number
+  /**
+   * `real`: bot sleep, work, check-ins, and reaction delays use wall-clock time.
+   * `compressed`: those same intervals run on the game clock, for tests and Blitz.
+   */
+  botClock: BotClockMode
   gameTime: number
   lastRealMs: number
+  /** Set only while advance() is stepping. Lets alerts use the real instant that matches the current game time. */
+  clockAnchor?: { game: number; real: number; speed: number } | null
   mapWidth: number
   mapHeight: number
   terrainSeed: number

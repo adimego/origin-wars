@@ -8,7 +8,7 @@ import { addUnits, cloneUnits, emptyRecruitQueues, emptyResources, emptyUnits, h
 import { storageCapacity, townPoints } from './formulas.ts'
 import { distance, travelMs } from './movement.ts'
 import { makeRng } from './rng.ts'
-import { habitBlurb } from './schedule.ts'
+import { alarmBlurb, considerAlertWake, currentScheduleNow, gameInstantToSchedule, habitBlurb, scheduleInstantToGame, scheduleNowFromGame } from './schedule.ts'
 import { canInvest, durationForTown, holdsCamp, productionFactorFor, siegeOn, stretchLabor } from './siege.ts'
 import { completeRecruit, completeResearch } from './recruit.ts'
 import { floorResources, grantResources, syncAllResources, syncTownResources } from './resources.ts'
@@ -34,7 +34,8 @@ export function advance(state: GameState, realNow: number): GameState {
   const elapsed = Math.max(0, realNow - state.lastRealMs)
   const target = Math.round(state.gameTime + elapsed * state.speed)
   const draft = structuredClone(state)
-  simulate(draft, Math.max(draft.gameTime, target))
+  const anchor = { game: draft.gameTime, real: draft.lastRealMs, speed: draft.speed }
+  simulate(draft, Math.max(draft.gameTime, target), anchor)
   draft.lastRealMs = realNow
   return draft
 }
@@ -55,6 +56,25 @@ export function setWorldSpeed(state: GameState, speed: number, realNow: number):
   const next = Math.max(1, Math.min(500, speed))
   if (next === synced.speed) return synced
   return { ...synced, speed: next }
+}
+
+/** Switch bot hours between wall-clock time and the sped-up game clock. Deadlines keep the same remaining gap. */
+export function setBotClock(state: GameState, mode: GameState['botClock'], realNow: number): GameState {
+  const synced = advance(state, realNow)
+  if ((synced.botClock ?? 'real') === mode) return synced
+  const draft = structuredClone(synced)
+  const oldNow = draft.botClock === 'compressed' ? draft.gameTime : realNow
+  const newNow = mode === 'compressed' ? draft.gameTime : realNow
+  const shift = (instant: number) => newNow + (instant - oldNow)
+  for (const owner of draft.owners) {
+    if (owner.nextLoginAt != null) owner.nextLoginAt = shift(owner.nextLoginAt)
+    if (owner.lastLoginAt != null) owner.lastLoginAt = shift(owner.lastLoginAt)
+    if (owner.sessionEndsAt != null) owner.sessionEndsAt = shift(owner.sessionEndsAt)
+    for (const order of owner.orders) order.at = shift(order.at)
+  }
+  draft.botClock = mode
+  draft.lastRealMs = realNow
+  return draft
 }
 
 function ownerById(state: GameState, id: string): Owner | undefined {
@@ -183,6 +203,15 @@ function openSiege(state: GameState, town: Town, ownerId: string, originTownId: 
   town.workPace = SIEGE.laborFactor
   stretchLabor(town, now)
   state.sieges.push(siege)
+  const defender = state.owners.find((entry) => entry.id === town.ownerId)
+  if (defender && defender.id !== ownerId) {
+    considerAlertWake(
+      state,
+      defender,
+      gameInstantToSchedule(state, siege.endsAt, state.gameTime, currentScheduleNow(state)),
+      makeRng(state),
+    )
+  }
   const origin = findTown(state, originTownId)
   const summary = `${origin?.name ?? 'An army'} has invested ${town.name}. The fields slow, and the camp holds until the clock runs out.`
   for (const owner of [ownerId, town.ownerId]) {
@@ -545,7 +574,10 @@ function arrive(state: GameState, movement: Movement): void {
       defenders: { units: defenders, research: target.research },
     })
     const owner = ownerById(state, target.ownerId)
-    const habit = result.revealed === 'full' && owner?.schedule ? habitBlurb(owner.schedule) : null
+    const habit =
+      result.revealed === 'full' && owner?.schedule
+        ? `${habitBlurb(owner.schedule)}${owner.traits ? ` ${alarmBlurb(owner.traits.wakeOnAlert)}` : ''}`
+        : null
     const camp = siegeOn(state, target.id)
     const scout = {
       success: result.success,
@@ -713,7 +745,13 @@ interface SimEvent {
   discard: () => void
 }
 
-function nextEvent(state: GameState): SimEvent | null {
+interface ClockAnchor {
+  game: number
+  real: number
+  speed: number
+}
+
+function nextEvent(state: GameState, anchor: ClockAnchor): SimEvent | null {
   let best: SimEvent | null = null
   const consider = (event: SimEvent) => {
     if (!best || event.t < best.t || (event.t === best.t && event.prio < best.prio)) best = event
@@ -791,7 +829,7 @@ function nextEvent(state: GameState): SimEvent | null {
       const order = owner.orders[0]
       const ownerId = owner.id
       consider({
-        t: order.at,
+        t: scheduleInstantToGame(state, order.at, anchor),
         prio: 2,
         key: `order:${order.id}`,
         run: () => {
@@ -813,16 +851,16 @@ function nextEvent(state: GameState): SimEvent | null {
       const ownerId = owner.id
       const at = owner.nextLoginAt
       consider({
-        t: at,
+        t: scheduleInstantToGame(state, at, anchor),
         prio: 3,
         key: `login:${ownerId}:${at}`,
         run: () => {
           const current = ownerById(state, ownerId)
-          if (current) botLogin(state, current)
+          if (current) botLogin(state, current, scheduleNowFromGame(state, state.gameTime, anchor))
         },
         discard: () => {
           const current = ownerById(state, ownerId)
-          if (current) current.nextLoginAt = state.gameTime + 60 * 60_000
+          if (current) current.nextLoginAt = scheduleNowFromGame(state, state.gameTime, anchor) + 60 * 60_000
         },
       })
     }
@@ -845,13 +883,15 @@ function nextEvent(state: GameState): SimEvent | null {
   return best
 }
 
-function simulate(state: GameState, target: number): void {
+function simulate(state: GameState, target: number, anchor: ClockAnchor): void {
+  state.clockAnchor = anchor
   let guard = 0
   let lastStamp = ''
   let spins = 0
+  try {
   while (guard < 400_000) {
     guard += 1
-    const event = nextEvent(state)
+    const event = nextEvent(state, anchor)
     if (!event || event.t > target) break
     const stamp = `${event.key}@${event.t}`
     if (stamp === lastStamp) {
@@ -874,6 +914,9 @@ function simulate(state: GameState, target: number): void {
   state.aidCalls = state.aidCalls.filter((call) => call.expiresAt > target)
   ensurePlayer(state)
   trimReports(state)
+  } finally {
+    state.clockAnchor = null
+  }
 }
 
 export function summarizeOffline(before: GameState, after: GameState): string[] {
@@ -952,6 +995,18 @@ export function withdrawSiege(state: GameState, siegeId: string): string | null 
   return null
 }
 
+function wakeForAid(state: GameState, town: Town, siege: Siege): void {
+  const rng = makeRng(state)
+  const deadline = gameInstantToSchedule(state, siege.endsAt, state.gameTime, currentScheduleNow(state))
+  const skip = new Set([town.ownerId, siege.attackerOwnerId])
+  for (const owner of state.owners) {
+    if (owner.kind !== 'bot' || skip.has(owner.id)) continue
+    const near = state.towns.some((other) => other.ownerId === owner.id && distance(other, town) <= SIEGE.aidRadius)
+    if (!near) continue
+    considerAlertWake(state, owner, deadline, rng)
+  }
+}
+
 export function callForAid(state: GameState, townId: string): string | null {
   const town = findTown(state, townId)
   const siege = siegeOn(state, townId)
@@ -967,6 +1022,7 @@ export function callForAid(state: GameState, townId: string): string | null {
     askedAt: state.gameTime,
     expiresAt: siege.endsAt,
   })
+  wakeForAid(state, town, siege)
   pushReport(state, {
     id: nid(state, 'r'),
     ownerId: town.ownerId,
@@ -974,7 +1030,7 @@ export function callForAid(state: GameState, townId: string): string | null {
     unread: true,
     kind: 'siege',
     title: `Aid requested for ${town.name}`,
-    summary: 'Nearby lords hear of it when they next sit down. An asleep neighbor answers late, or not at all.',
+    summary: 'Nearby lords hear of it when they next sit down. A few keep alarms on and may sit up groggy. The rest answer when they wake, or not at all.',
     townId,
     siegeEndsAt: siege.endsAt,
   })

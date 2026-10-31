@@ -13,10 +13,11 @@ export function TitleScreen() {
   const [name, setName] = useState('Warden')
   const [seed, setSeed] = useState('')
   const [speed, setSpeed] = useState(20)
+  const [compressBots, setCompressBots] = useState(false)
   const home = state?.towns.find((town) => town.id === state.selectedTownId)
 
   const start = () => {
-    begin({ speed, seed, name })
+    begin({ speed, seed, name, botClock: compressBots ? 'compressed' : 'real' })
   }
 
   return (
@@ -79,7 +80,10 @@ export function TitleScreen() {
                   <button
                     key={preset.id}
                     type="button"
-                    onClick={() => setSpeed(preset.speed)}
+                    onClick={() => {
+                      setSpeed(preset.speed)
+                      setCompressBots(preset.id === 'blitz')
+                    }}
                     className={`rounded-md border px-3 py-3 text-left ${speed === preset.speed ? 'border-brass bg-brass/10' : 'border-line bg-ink/40'}`}
                   >
                     <span className="block font-medium text-parchment">
@@ -90,6 +94,19 @@ export function TitleScreen() {
                 ))}
               </div>
             </fieldset>
+            <label className="flex items-start gap-2 text-sm text-muted">
+              <input
+                type="checkbox"
+                className="mt-1"
+                checked={compressBots}
+                onChange={(event) => setCompressBots(event.target.checked)}
+              />
+              <span>
+                Compress bot hours for testing. Sleep and reaction delays run on the game clock. Leave this off for real
+                hours: a lord asleep until 7:00 stays offline until then, whatever the world speed.
+                {speed >= 120 ? ' Blitz turns this on so you can see them act.' : ''}
+              </span>
+            </label>
             <div>
               <label className="text-xs tracking-wide text-muted" htmlFor="seed">
                 Map seed <span className="text-faint">(optional)</span>

@@ -1,5 +1,5 @@
 import { BUILDING_IDS, type BuildingId } from '../config/ids.ts'
-import type { Personality } from '../config/ai.ts'
+import { AI_CONFIG, type Personality } from '../config/ai.ts'
 import { UNITS } from '../config/units.ts'
 import { SIEGE } from '../config/world.ts'
 import { enqueueBuilding, explainBuild, findTown } from './buildings.ts'
@@ -10,8 +10,9 @@ import { popOf } from './formulas.ts'
 import { distance, portionUnits, travelMs } from './movement.ts'
 import { combatPop } from './population.ts'
 import { explainResearch, maxAffordable, startResearch, enqueueRecruit } from './recruit.ts'
-import { makeRng, type Rng } from './rng.ts'
-import { evaluateIncomingReaction, nextLoginAt, phaseAt, rollSession } from './schedule.ts'
+import { lerp, makeRng, type Rng } from './rng.ts'
+import { GAME_MINUTE_MS } from './time.ts'
+import { evaluateIncomingReaction, gameInstantToSchedule, gameSpanToSchedule, nextLoginAt, phaseAt, rollSession } from './schedule.ts'
 import { syncAllResources } from './resources.ts'
 import { siegeWeight } from './siege.ts'
 import { nid, type BotOrder, type BotTraits, type GameState, type Owner, type Town } from './types.ts'
@@ -95,13 +96,14 @@ export function pickDodgeDestination(state: GameState, from: Town, avoidId: stri
   return best?.id ?? null
 }
 
-function pickSupport(owned: Town[], target: Town, arrivesAt: number, reactsAt: number): Town | null {
+function pickSupport(state: GameState, owned: Town[], target: Town, arrivesGame: number, reactsSchedule: number, scheduleNow: number): Town | null {
+  const arrivesAt = gameInstantToSchedule(state, arrivesGame, state.gameTime, scheduleNow)
   let best: Town | null = null
   let bestDist = Number.POSITIVE_INFINITY
   for (const town of owned) {
     if (town.id === target.id || town.buildings.rally < 1 || combatPop(town.units) < 8) continue
     const dist = distance(town, target)
-    if (reactsAt + travelMs(dist, town.units) >= arrivesAt) continue
+    if (reactsSchedule + gameSpanToSchedule(state, travelMs(dist, town.units)) >= arrivesAt) continue
     if (dist < bestDist) {
       best = town
       bestDist = dist
@@ -132,7 +134,16 @@ function pickTarget(state: GameState, town: Town, traits: BotTraits, rng: Rng): 
   return candidates[0].town
 }
 
-function planOrders(state: GameState, owner: Owner, reactsAt: number, sessionEnd: number, phaseActive: boolean, rng: Rng): BotOrder[] {
+function planOrders(
+  state: GameState,
+  owner: Owner,
+  scheduleNow: number,
+  reactsAt: number,
+  sessionEnd: number,
+  phaseActive: boolean,
+  alerted: boolean,
+  rng: Rng,
+): BotOrder[] {
   const schedule = owner.schedule
   const traits = owner.traits
   if (!schedule || !traits) return []
@@ -149,7 +160,7 @@ function planOrders(state: GameState, owner: Owner, reactsAt: number, sessionEnd
     clicks += 1
     return true
   }
-  respondToSieges(state, owner, owned, reactsAt, sessionEnd, rng, push)
+  respondToSieges(state, owner, owned, scheduleNow, reactsAt, sessionEnd, alerted, rng, push)
 
   const incoming = state.movements
     .filter(
@@ -161,18 +172,18 @@ function planOrders(state: GameState, owner: Owner, reactsAt: number, sessionEnd
     .sort((a, b) => a.arrivesAt - b.arrivesAt)
 
   for (const attack of incoming.slice(0, 2)) {
-    const sessionLength = sessionEnd - state.gameTime
+    const sessionLength = sessionEnd - scheduleNow
     const decision = evaluateIncomingReaction({
       schedule,
       logins: [
         {
-          at: state.gameTime,
+          at: scheduleNow,
           sessionLengthMs: sessionLength,
-          reactionDelayMs: reactsAt - state.gameTime,
+          reactionDelayMs: reactsAt - scheduleNow,
         },
       ],
-      arrivesAt: attack.arrivesAt,
-      noticeRolls: [rng()],
+      arrivesAt: gameInstantToSchedule(state, attack.arrivesAt, state.gameTime, scheduleNow),
+      noticeRolls: [alerted ? 0 : rng()],
       attention: traits.attention,
     })
     if (!decision.notices) continue
@@ -182,7 +193,7 @@ function planOrders(state: GameState, owner: Owner, reactsAt: number, sessionEnd
       const dest = pickDodgeDestination(state, town, attack.originTownId)
       if (dest && push({ type: 'dodge', fromTownId: town.id, toTownId: dest })) continue
     }
-    const helper = pickSupport(owned, town, attack.arrivesAt, reactsAt)
+    const helper = pickSupport(state, owned, town, attack.arrivesAt, reactsAt, scheduleNow)
     if (helper && rng() < traits.caution) {
       push({ type: 'support', fromTownId: helper.id, toTownId: town.id, portion: 0.55 })
     }
@@ -262,14 +273,28 @@ function planOrders(state: GameState, owner: Owner, reactsAt: number, sessionEnd
   return orders
 }
 
-export function botLogin(state: GameState, owner: Owner): void {
+function rollAlertSession(rng: Rng): { lengthMs: number; reactionDelayMs: number } {
+  const click = Math.max(
+    GAME_MINUTE_MS,
+    Math.round(lerp(AI_CONFIG.alertClickMin[0], AI_CONFIG.alertClickMin[1], rng()) * GAME_MINUTE_MS),
+  )
+  const stay = Math.max(
+    click + GAME_MINUTE_MS,
+    Math.round(lerp(AI_CONFIG.alertStayMin[0], AI_CONFIG.alertStayMin[1], rng()) * GAME_MINUTE_MS),
+  )
+  return { lengthMs: stay, reactionDelayMs: click }
+}
+
+export function botLogin(state: GameState, owner: Owner, scheduleNow: number): void {
   if (owner.kind !== 'bot' || !owner.schedule || !owner.traits) return
-  const now = state.gameTime
+  const now = scheduleNow
+  const alerted = owner.wokenByAlert === true
+  owner.wokenByAlert = false
   owner.orders = owner.orders.filter((order) => order.at > now)
-  syncAllResources(state, now)
+  syncAllResources(state, state.gameTime)
   const rng = makeRng(state)
   const phase = phaseAt(owner.schedule, now)
-  const session = rollSession(owner.schedule, phase, rng)
+  const session = alerted && phase === 'sleep' ? rollAlertSession(rng) : rollSession(owner.schedule, phase, rng)
   owner.lastLoginAt = now
   owner.sessionEndsAt = now + session.lengthMs
   owner.nextLoginAt = nextLoginAt(owner.schedule, owner.sessionEndsAt, rng)
@@ -277,7 +302,7 @@ export function botLogin(state: GameState, owner: Owner): void {
   if (session.reactionDelayMs >= session.lengthMs) return
   const reactsAt = now + session.reactionDelayMs
   if (reactsAt <= now || reactsAt >= owner.sessionEndsAt) return
-  const orders = planOrders(state, owner, reactsAt, owner.sessionEndsAt, phase === 'active', rng)
+  const orders = planOrders(state, owner, now, reactsAt, owner.sessionEndsAt, phase === 'active', alerted, rng)
   owner.orders.push(...orders)
   owner.orders.sort((a, b) => a.at - b.at)
 }
@@ -334,8 +359,10 @@ function respondToSieges(
   state: GameState,
   owner: Owner,
   owned: Town[],
+  scheduleNow: number,
   reactsAt: number,
   sessionEnd: number,
+  alerted: boolean,
   rng: Rng,
   push: (order: OrderDraft) => boolean,
 ): void {
@@ -345,12 +372,13 @@ function respondToSieges(
   for (const siege of state.sieges) {
     if (siege.attackerOwnerId === owner.id) continue
     const home = owned.find((town) => town.id === siege.townId)
-    if (!home || siege.endsAt <= reactsAt) continue
+    const siegeEnds = gameInstantToSchedule(state, siege.endsAt, state.gameTime, scheduleNow)
+    if (!home || siegeEnds <= reactsAt) continue
     const decision = evaluateIncomingReaction({
       schedule,
-      logins: [{ at: state.gameTime, sessionLengthMs: sessionEnd - state.gameTime, reactionDelayMs: reactsAt - state.gameTime }],
-      arrivesAt: siege.endsAt,
-      noticeRolls: [rng()],
+      logins: [{ at: scheduleNow, sessionLengthMs: sessionEnd - scheduleNow, reactionDelayMs: reactsAt - scheduleNow }],
+      arrivesAt: siegeEnds,
+      noticeRolls: [alerted ? 0 : rng()],
       attention: traits.attention,
     })
     if (!decision.notices) continue
@@ -358,7 +386,11 @@ function respondToSieges(
     const helper = owned
       .filter((town) => town.id !== home.id && town.buildings.rally >= 1 && combatPop(town.units) >= 8)
       .sort((a, b) => distance(a, home) - distance(b, home))[0]
-    if (helper && reactsAt + travelMs(distance(helper, home), helper.units) < siege.endsAt && rng() < Math.min(0.92, traits.caution + 0.3)) {
+    if (
+      helper &&
+      reactsAt + gameSpanToSchedule(state, travelMs(distance(helper, home), helper.units)) < siegeEnds &&
+      rng() < Math.min(0.92, traits.caution + 0.3)
+    ) {
       push({ type: 'relief', fromTownId: helper.id, toTownId: home.id, portion: 0.75 })
     }
     if (!state.aidCalls.some((call) => call.townId === home.id && call.expiresAt > state.gameTime)) {
@@ -366,7 +398,7 @@ function respondToSieges(
     }
   }
   for (const call of state.aidCalls) {
-    if (call.ownerId === owner.id || call.expiresAt <= reactsAt) continue
+    if (call.ownerId === owner.id || gameInstantToSchedule(state, call.expiresAt, state.gameTime, scheduleNow) <= reactsAt) continue
     const siege = state.sieges.find((entry) => entry.townId === call.townId)
     if (!siege || siege.attackerOwnerId === owner.id) continue
     if (rng() > SIEGE.aidChance[traits.targetStyle]) continue
@@ -376,7 +408,9 @@ function respondToSieges(
       .filter((town) => town.buildings.rally >= 1 && combatPop(town.units) >= 8 && distance(town, target) <= SIEGE.aidRadius)
       .sort((a, b) => distance(a, target) - distance(b, target))[0]
     if (!helper) continue
-    const late = reactsAt + travelMs(distance(helper, target), helper.units) >= siege.endsAt
+    const late =
+      reactsAt + gameSpanToSchedule(state, travelMs(distance(helper, target), helper.units)) >=
+      gameInstantToSchedule(state, siege.endsAt, state.gameTime, scheduleNow)
     if (late && rng() > traits.mistakeChance) continue
     push({ type: 'relief', fromTownId: helper.id, toTownId: target.id, portion: 0.55 })
   }

@@ -6,6 +6,8 @@ import { hasUnits } from './defaults.ts'
 import { findTown } from './buildings.ts'
 import { payResources, syncTownResources } from './resources.ts'
 import { siegeWeight } from './siege.ts'
+import { considerAlertWake, currentScheduleNow, gameInstantToSchedule } from './schedule.ts'
+import { makeRng } from './rng.ts'
 import { emptyResources } from './defaults.ts'
 import { nid, type GameState, type UnitCounts } from './types.ts'
 
@@ -72,6 +74,17 @@ export function sendArmy(
     returnsAt: null,
     merchantCount: 0,
   })
+  if (mission === 'attack' || mission === 'siege') {
+    const defender = state.owners.find((entry) => entry.id === to.ownerId)
+    if (defender) {
+      considerAlertWake(
+        state,
+        defender,
+        gameInstantToSchedule(state, state.gameTime + trip, state.gameTime, currentScheduleNow(state)),
+        makeRng(state),
+      )
+    }
+  }
   return null
 }
 

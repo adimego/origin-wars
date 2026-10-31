@@ -10,9 +10,10 @@ export interface BusyWindow {
 }
 
 /**
- * Human-schedule parameters. Times are in game-minutes unless noted.
- * A bot does not act when a timer finishes. It acts on its next visit,
- * after a reaction delay, and only if that visit lasts long enough.
+ * Human-schedule parameters. Times are real minutes on the wall clock
+ * (each bot's own time zone). World speed does not shrink sleep or reaction
+ * delay. When bot hours are set to compressed, the same numbers run on the
+ * game clock instead, for tests and quick play.
  */
 export const AI_CONFIG = {
   timezone: { min: -11, max: 12 },
@@ -78,7 +79,7 @@ export const AI_CONFIG = {
   sleepCheckDelayMin: [30, 110] as [number, number],
   /** Extra drowsy delay after the sleep window ends. */
   wakeDelayMin: [12, 48] as [number, number],
-  /** How long they stay once they sit down, in game-minutes [min, max]. */
+  /** How long they stay once they sit down, in schedule minutes [min, max]. */
   sessionsMin: {
     active: [12, 34] as [number, number],
     busy: [2, 7] as [number, number],
@@ -103,6 +104,23 @@ export const AI_CONFIG = {
   fickle: { easy: 0.34, normal: 0.22, hard: 0.1 } as Record<Difficulty, number>,
   clickGapMin: 2,
   traitJitter: 0.12,
+  /**
+   * Chance of waking for an alarm while asleep. A center per personality, then a wide
+   * spread so the same type includes hardcore, casual, and in-between lords.
+   */
+  wakeOnAlert: {
+    farmer: 0.18,
+    raider: 0.5,
+    defender: 0.7,
+    expander: 0.36,
+  } as Record<Personality, number>,
+  wakeOnAlertSpread: 0.4,
+  /** Real minutes from the alarm until they sit up. They can go back to sleep after. */
+  alertGroggyMin: [4, 22] as [number, number],
+  /** Minutes from sitting up to the first order. The groggy wait already happened. */
+  alertClickMin: [1, 2] as [number, number],
+  /** How long the groggy visit lasts. Long enough for one order, then the night resumes. */
+  alertStayMin: [4, 9] as [number, number],
   personalities: {
     farmer: {
       attackChance: 0.2,

@@ -7,6 +7,12 @@ function jitter(value: number, rng: Rng, amount: number): number {
   return value * (1 + (rng() * 2 - 1) * amount)
 }
 
+export function rollWakeOnAlert(personality: Personality, rng: Rng): number {
+  const center = AI_CONFIG.wakeOnAlert[personality]
+  const swung = center + (rng() * 2 - 1) * AI_CONFIG.wakeOnAlertSpread
+  return clamp(swung, 0, 1)
+}
+
 export function rollTraits(personality: Personality, difficulty: Difficulty, rng: Rng): BotTraits {
   const base = AI_CONFIG.personalities[personality]
   const spread = AI_CONFIG.traitJitter
@@ -26,6 +32,7 @@ export function rollTraits(personality: Personality, difficulty: Difficulty, rng
     playerBias: base.playerBias,
     weakBias: base.weakBias,
     targetNoise: base.targetNoise,
+    wakeOnAlert: rollWakeOnAlert(personality, rng),
     preferredUnits: [...base.preferredUnits],
     buildWeights: fillWeights(base.buildWeights),
     targetStyle: personality,

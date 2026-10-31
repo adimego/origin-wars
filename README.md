@@ -30,15 +30,22 @@ The world speed (Relaxed, Standard, Blitz) multiplies the realm clock. It is a s
 
 ## Bots act like people
 
-Each bot has a personality (steward, raider, castellan, claimant), a difficulty, a chronotype, and a timezone offset from the realm clock.
+Each bot has a personality (steward, raider, castellan, claimant), a difficulty, a chronotype, and a time zone offset from UTC.
+
+Their day runs on **real wall-clock time**, not the sped-up game clock. A lord who sleeps 23:00–07:00 in their zone is offline for those eight real hours whether the world speed is 1× or 120×. Production, building, marches, and sieges still scale with world speed. Check-ins, busy periods, and the pause before the first click are real minutes too.
 
 - They sleep. During that window they usually do not log in at all. A rare night check is possible, and even then they often miss what is in front of them.
+- Each lord has a dedication, `wakeOnAlert`, rolled around a personality center with a wide spread (`src/game/config/ai.ts`). A hardcore lord keeps alarms on and can sit up for an attack or siege on their own town, or for a neighbor’s call for aid. They wait a groggy 4–22 real minutes, give an order if there is still time, and usually go back to sleep. A casual lord never wakes for an alarm. Most lords are in between and wake only when the roll lands under their chance. Castellans tend higher, stewards lower, but every type includes both.
 - Work hours are busy: check-ins are sparse and the visit is short.
 - While awake they sit down at irregular intervals, then wait a reaction delay before the first order. If the visit is shorter than that delay, they saw the screen and got pulled away.
 - They do not fill the build queue the moment resources allow. One visit is one or two clicks, sometimes the wrong building, sometimes a raid that is too small.
-- An attack or a siege that lands while they are asleep, or before they finish reacting, is not answered. If they notice in time they may sally, send relief from another town, or call the neighbors. Those neighbors answer on their own next visit, not instantly.
+- An attack or a siege that ends while they are asleep, or before they finish reacting, is not answered. If they notice in time they may sally, send relief from another town, or call the neighbors. A neighbor who is asleep answers only if their dedication wakes them, and only after the groggy delay. Everyone else waits for the next real visit.
 
-Their current presence (asleep, busy, at the table) is visible on the map. A full scout report adds the sleep window and how far their day sits from the realm clock.
+Catch-up after you close the tab steps both clocks together. A login due at a real timestamp is applied at the game time that wall clock maps to under the current world speed. Changing speed does not move their bedtime.
+
+**Bot hours: Real hours** is the default. **Fast hours** (on by default for a Blitz campaign, and available as a header toggle) runs the same schedule on the game clock so you can watch them act without waiting out a night. The choice is stored in the save.
+
+Their current presence (asleep, busy, at the table) is visible on the map, using their real local time, along with whether they keep alarms on. A full scout report adds the sleep window, the UTC offset, and that same alarm habit.
 
 All of the numbers live in `src/game/config/ai.ts`.
 
@@ -49,7 +56,7 @@ The simulation is plain TypeScript under `src/game` and does not import React. A
 - `src/game/config/` — buildings, units, combat, world speed, and bot schedules.
 - `src/game/sim/` — formulas, the event loop, combat, sieges, movement, and bot planning.
 - `src/ui/` — the Origin Wars client.
-- Saves go to `localStorage` under `origin-wars-save-v2`. Older saves are ignored.
+- Saves go to `localStorage` under `origin-wars-save-v3`. A v2 save is kept, but bot logins are rescheduled onto the wall clock.
 
 Time is a game clock. Deadlines are game-time milliseconds. World speed only changes how fast that clock moves against the wall clock:
 
@@ -70,7 +77,7 @@ Edit these without touching the loop:
 | `src/game/config/buildings.ts` | Costs, build times, production, storage, population, requirements |
 | `src/game/config/units.ts` | Combat stats, carry, population, training, research |
 | `src/game/config/world.ts` | Map size, march pace, queue slots, luck, siege clock, market, speed presets |
-| `src/game/config/ai.ts` | Sleep, work hours, check-in gaps, reaction delays, personalities |
+| `src/game/config/ai.ts` | Sleep, work hours, check-in gaps, reaction delays, wake-on-alert, personalities |
 
 Production at level n is `base × growth^(n-1)` per game hour. Build cost and build time use the same shape. Headquarters divides build time by `1.05^level`.
 
@@ -80,7 +87,7 @@ Production at level n is `base × growth^(n-1)` per game hour. Build cost and bu
 npm test
 ```
 
-Vitest covers resource production and the storage cap, build times and the queue, recruit timers, combat (including the wall, rams, catapults, and scouts), sieges (duration, investing, relief, hampered production, a sleeping defender missing the clock), and the bot schedule: sleep versus work, irregular logins, reaction delay, missed attacks, and personality differences. One case generates a realm and advances it an hour.
+Vitest covers resource production and the storage cap, build times and the queue, recruit timers, combat (including the wall, rams, catapults, and scouts), sieges (duration, investing, relief, hampered production, a sleeping defender missing the clock), and the bot schedule: sleep versus work, irregular logins, reaction delay, missed attacks, wake-on-alert (casual, hardcore, in-between, groggy delay, back to sleep, aid calls), and personality differences. One case generates a realm and advances it an hour.
 
 ## Siege numbers
 
@@ -104,6 +111,10 @@ All of these live in `SIEGE` inside `src/game/config/world.ts`. Times are game-m
 At Standard (20×), the floor is 20 real minutes and still holds after the 50% siege-weight cut. A level-1 hamlet with 8 points and no wall is about 42 real minutes with no engines, and about 38 with one commander. A town with headquarters 8, wall 8, and 40 points is about 2 hours 45 minutes, or about 1 hour 40 minutes if the camp has 16 weight. The cap is 3 hours 20 minutes. Blitz (120×) is six times faster, so the same floor is about 3 real minutes 20 seconds.
 
 Chance a bot who could raid will invest instead, if they have the weight: steward 8%, raider 38%, castellan 6%, claimant 72%. Chance they ride to help someone else’s call: steward 40%, raider 10%, castellan 72%, claimant 22%.
+
+Because bot hours are real, a full night is about eight real hours and every current siege is shorter than that (20 minutes to 3 hours 20 minutes at Standard). A casual lord who is already asleep misses a siege that ends before the natural wake. A hardcore lord can sit up, but only when the groggy delay (4–22 real minutes, plus a minute or two to give the order) still lands before the camp falls, and a relief march from a neighbor still has to fit after that. The longest aid-radius march is about six real minutes. A 20-minute hamlet siege is answerable for a light sleeper and not for a slow one. An eight-hour night is longer than the siege cap, so a lord who does not wake still loses the town. Fast hours are the way to exercise this without waiting out the night.
+
+Recommendation: leave the 20-minute floor where it is. If taking towns from sleeping lords feels too easy, raise only the upper siege durations so a large town can outlast a night (about 8–10 real hours at Standard) while hamlets stay short. Wake-on-alert already saves the lords who keep their alarms on.
 
 ## Known gaps
 

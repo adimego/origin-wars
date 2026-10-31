@@ -39,7 +39,8 @@ export function makeOwner(partial: Partial<Owner> & { id: string; kind: Owner['k
 
 export function makeState(): GameState {
   return {
-    version: 2,
+    version: 3,
+    botClock: 'compressed',
     seed: 1,
     rngState: 1,
     speed: 1,
@@ -126,6 +127,7 @@ export function focusedTraits(patch: Partial<BotTraits> = {}): BotTraits {
     playerBias: 0,
     weakBias: 0,
     targetNoise: 0,
+    wakeOnAlert: 0,
     preferredUnits: ['spear'],
     buildWeights: weights,
     targetStyle: 'farmer',
