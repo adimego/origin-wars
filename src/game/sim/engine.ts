@@ -1,15 +1,15 @@
 import { BUILDINGS } from '../config/buildings.ts'
 import { UNIT_IDS, type BuildingId } from '../config/ids.ts'
-import { COMBAT, WORLD } from '../config/world.ts'
+import { COMBAT, SIEGE, WORLD } from '../config/world.ts'
 import { botLogin, executeBotOrder } from './ai.ts'
 import { completeBuild, findTown } from './buildings.ts'
 import { distributeLosses, resolveCombat, resolveScout } from './combat.ts'
-import { applyNobleImpact, loyaltyAt, rollLoyaltyDrop } from './conquest.ts'
-import { addUnits, cloneUnits, emptyRecruitQueues, emptyResources, hasUnits } from './defaults.ts'
+import { addUnits, cloneUnits, emptyRecruitQueues, emptyResources, emptyUnits, hasUnits } from './defaults.ts'
 import { storageCapacity, townPoints } from './formulas.ts'
 import { distance, travelMs } from './movement.ts'
 import { makeRng } from './rng.ts'
 import { habitBlurb } from './schedule.ts'
+import { canInvest, durationForTown, holdsCamp, productionFactorFor, siegeOn, stretchLabor } from './siege.ts'
 import { completeRecruit, completeResearch } from './recruit.ts'
 import { floorResources, grantResources, syncAllResources, syncTownResources } from './resources.ts'
 import {
@@ -19,6 +19,7 @@ import {
   type Movement,
   type Owner,
   type Report,
+  type Siege,
   type Town,
   type UnitCounts,
   type UnitLine,
@@ -137,7 +138,7 @@ function sendHome(
 }
 
 function combine(groups: UnitCounts[]): UnitCounts {
-  const total = cloneUnits(groups[0] ?? { spear: 0, sword: 0, axe: 0, scout: 0, light: 0, heavy: 0, ram: 0, catapult: 0, noble: 0 })
+  const total = cloneUnits(groups[0] ?? emptyUnits())
   for (let i = 1; i < groups.length; i++) addUnits(total, groups[i])
   return total
 }
@@ -154,12 +155,215 @@ function clampStores(town: Town): void {
   if (town.buildings.headquarters < 1) town.buildings.headquarters = 1
 }
 
+function syncTown(state: GameState, town: Town, now: number): void {
+  syncTownResources(town, now, productionFactorFor(state, town.id))
+}
+
+function liftSiege(state: GameState, siege: Siege, now: number, remnants: UnitCounts | null): void {
+  const town = findTown(state, siege.townId)
+  if (town) town.workPace = 1
+  if (town && remnants && hasUnits(remnants)) {
+    sendHome(state, siege.attackerOwnerId, siege.originTownId, town, remnants, emptyResources(), now)
+  }
+  state.sieges = state.sieges.filter((entry) => entry.id !== siege.id)
+  state.aidCalls = state.aidCalls.filter((call) => call.townId !== siege.townId)
+}
+
+function openSiege(state: GameState, town: Town, ownerId: string, originTownId: string, units: UnitCounts, now: number): Siege {
+  const weight = units.ram * SIEGE.weight.ram + units.catapult * SIEGE.weight.catapult + units.commander * SIEGE.weight.commander
+  const siege: Siege = {
+    id: nid(state, 'sg'),
+    townId: town.id,
+    attackerOwnerId: ownerId,
+    originTownId,
+    units: cloneUnits(units),
+    startedAt: now,
+    endsAt: now + durationForTown(town, weight),
+  }
+  town.workPace = SIEGE.laborFactor
+  stretchLabor(town, now)
+  state.sieges.push(siege)
+  const origin = findTown(state, originTownId)
+  const summary = `${origin?.name ?? 'An army'} has invested ${town.name}. The fields slow, and the camp holds until the clock runs out.`
+  for (const owner of [ownerId, town.ownerId]) {
+    pushReport(state, {
+      id: nid(state, 'r'),
+      ownerId: owner,
+      at: now,
+      unread: true,
+      kind: 'siege',
+      title: owner === ownerId ? `Siege of ${town.name}` : `${town.name} is under siege`,
+      summary,
+      townId: town.id,
+      siegeEndsAt: siege.endsAt,
+    })
+  }
+  return siege
+}
+
+function captureTown(state: GameState, siege: Siege, now: number): void {
+  const town = findTown(state, siege.townId)
+  if (!town) {
+    state.sieges = state.sieges.filter((entry) => entry.id !== siege.id)
+    return
+  }
+  if (!holdsCamp(siege.units)) {
+    const remnants = cloneUnits(siege.units)
+    liftSiege(state, siege, now, remnants)
+    pushReport(state, {
+      id: nid(state, 'r'),
+      ownerId: siege.attackerOwnerId,
+      at: now,
+      unread: true,
+      kind: 'siege',
+      title: `Siege of ${town.name} abandoned`,
+      summary: 'Too few soldiers were left to keep the camp.',
+      townId: town.id,
+      siegeEndsAt: null,
+    })
+    return
+  }
+  syncTown(state, town, now)
+  for (const group of [...town.support]) {
+    sendHome(state, group.ownerId, group.originTownId, town, group.units, emptyResources(), now)
+  }
+  const previous = town.ownerId
+  town.ownerId = siege.attackerOwnerId
+  town.units = cloneUnits(siege.units)
+  town.support = []
+  town.buildQueue = []
+  town.recruitQueues = emptyRecruitQueues()
+  town.researchJob = null
+  town.workPace = 1
+  state.sieges = state.sieges.filter((entry) => entry.id !== siege.id)
+  state.aidCalls = state.aidCalls.filter((call) => call.townId !== town.id)
+  pushReport(state, {
+    id: nid(state, 'r'),
+    ownerId: siege.attackerOwnerId,
+    at: now,
+    unread: true,
+    kind: 'siege',
+    title: `${town.name} is taken`,
+    summary: `The siege held. ${town.name} surrendered with its stores and walls.`,
+    townId: town.id,
+    siegeEndsAt: null,
+  })
+  pushReport(state, {
+    id: nid(state, 'r'),
+    ownerId: previous,
+    at: now,
+    unread: true,
+    kind: 'siege',
+    title: `${town.name} fell`,
+    summary: `${lordName(state, siege.attackerOwnerId)} now holds ${town.name}.`,
+    townId: town.id,
+    siegeEndsAt: null,
+  })
+}
+
+function fightCamp(
+  state: GameState,
+  siege: Siege,
+  attackers: UnitCounts,
+  attackerResearch: Town['research'],
+  now: number,
+): { attackerWins: boolean; attackerRemaining: UnitCounts; attackerLosses: UnitCounts; defenderLosses: UnitCounts; defenderSent: UnitCounts; luck: number } {
+  const town = findTown(state, siege.townId)
+  const rng = makeRng(state)
+  const luck = (rng() * 2 - 1) * COMBAT.luckRange
+  const defenderSent = cloneUnits(siege.units)
+  const result = resolveCombat({
+    attackers: { units: attackers, research: attackerResearch },
+    defenders: { units: siege.units, research: {} },
+    wall: 0,
+    buildings: town?.buildings ?? ({} as Town['buildings']),
+    resources: emptyResources(),
+    luck,
+    catapultTarget: null,
+  })
+  siege.units = result.defenderRemaining
+  if (!holdsCamp(siege.units)) {
+    const remnants = cloneUnits(siege.units)
+    const brokenOwner = siege.attackerOwnerId
+    const townId = siege.townId
+    liftSiege(state, siege, now, hasUnits(remnants) ? remnants : null)
+    const place = findTown(state, townId)
+    const summary = 'The camp could not hold.'
+    pushReport(state, {
+      id: nid(state, 'r'),
+      ownerId: brokenOwner,
+      at: now,
+      unread: true,
+      kind: 'siege',
+      title: `Siege of ${place?.name ?? 'the town'} is broken`,
+      summary,
+      townId,
+      siegeEndsAt: null,
+    })
+    if (place && place.ownerId !== brokenOwner) {
+      pushReport(state, {
+        id: nid(state, 'r'),
+        ownerId: place.ownerId,
+        at: now,
+        unread: true,
+        kind: 'siege',
+        title: `Siege of ${place.name} is broken`,
+        summary: 'The besiegers have been driven off.',
+        townId,
+        siegeEndsAt: null,
+      })
+    }
+  }
+  return {
+    attackerWins: result.attackerWins,
+    attackerRemaining: result.attackerRemaining,
+    attackerLosses: result.attackerLosses,
+    defenderLosses: result.defenderLosses,
+    defenderSent,
+    luck,
+  }
+}
+
+function battleFrom(
+  state: GameState,
+  movement: Movement,
+  origin: Town,
+  target: Town,
+  sent: UnitCounts,
+  fought: { attackerWins: boolean; attackerLosses: UnitCounts; defenderLosses: UnitCounts; defenderSent?: UnitCounts; luck: number },
+  invested: boolean,
+  siegeEndsAt: number | null,
+): BattleView {
+  return {
+    attackerName: lordName(state, movement.ownerId),
+    defenderName: lordName(state, target.ownerId),
+    attackerTown: origin.name,
+    defenderTown: target.name,
+    fromX: origin.x,
+    fromY: origin.y,
+    toX: target.x,
+    toY: target.y,
+    luck: fought.luck,
+    attackerWins: fought.attackerWins,
+    attackerUnits: unitLines(sent, fought.attackerLosses),
+    defenderUnits: unitLines(fought.defenderSent ?? emptyUnits(), fought.defenderLosses),
+    loot: emptyResources(),
+    wallBefore: 0,
+    wallAfter: 0,
+    buildingTarget: null,
+    buildingBefore: 0,
+    buildingAfter: 0,
+    invested,
+    siegeEndsAt,
+  }
+}
+
 function arrive(state: GameState, movement: Movement): void {
   const now = state.gameTime
   if (movement.mission === 'return') {
     const home = findTown(state, movement.originTownId)
     if (home && home.ownerId === movement.ownerId) {
-      syncTownResources(home, now)
+      syncTown(state, home, now)
       addUnits(home.units, movement.units)
       const spilled = grantResources(home, movement.resources)
       const hauled = movement.resources.wood + movement.resources.clay + movement.resources.iron
@@ -196,7 +400,7 @@ function arrive(state: GameState, movement: Movement): void {
     const target = findTown(state, movement.targetTownId)
     if (!movement.tradeDelivered) {
       if (target && target.ownerId === movement.ownerId) {
-        syncTownResources(target, now)
+        syncTown(state, target, now)
         const spilled = grantResources(target, movement.resources)
         pushReport(state, {
           id: nid(state, 'r'),
@@ -240,7 +444,63 @@ function arrive(state: GameState, movement: Movement): void {
     return
   }
 
-  if (movement.mission === 'support') {
+  const siege = siegeOn(state, target.id)
+
+  if (movement.mission === 'support' || movement.mission === 'relief') {
+    if (siege && movement.ownerId === siege.attackerOwnerId) {
+      addUnits(siege.units, movement.units)
+      pushReport(state, {
+        id: nid(state, 'r'),
+        ownerId: movement.ownerId,
+        at: now,
+        unread: true,
+        kind: 'siege',
+        title: `Reinforcements join the siege of ${target.name}`,
+        summary: `Troops from ${origin.name} marched into the camp.`,
+        townId: target.id,
+        siegeEndsAt: siege.endsAt,
+      })
+      removeMovement(state, movement.id)
+      return
+    }
+    if (siege && (movement.mission === 'relief' || movement.ownerId === target.ownerId)) {
+      const fought = fightCamp(state, siege, movement.units, origin.research, now)
+      pushReport(state, {
+        id: nid(state, 'r'),
+        ownerId: movement.ownerId,
+        at: now,
+        unread: true,
+        kind: 'battle',
+        title: fought.attackerWins ? `Relief reached ${target.name}` : `Relief failed at ${target.name}`,
+        summary: fought.attackerWins
+          ? 'The camp was driven off.'
+          : 'The besiegers held the field. Survivors are falling back.',
+        townId: target.id,
+        battle: battleFrom(state, movement, origin, target, movement.units, fought, false, null),
+      })
+      if (hasUnits(fought.attackerRemaining)) {
+        if (movement.ownerId === target.ownerId && target.ownerId !== 'wild') addUnits(target.units, fought.attackerRemaining)
+        else sendHome(state, movement.ownerId, movement.originTownId, target, fought.attackerRemaining, emptyResources(), now)
+      }
+      removeMovement(state, movement.id)
+      return
+    }
+    if (movement.mission === 'relief') {
+      sendHome(state, movement.ownerId, movement.originTownId, target, movement.units, emptyResources(), now)
+      pushReport(state, {
+        id: nid(state, 'r'),
+        ownerId: movement.ownerId,
+        at: now,
+        unread: true,
+        kind: 'siege',
+        title: `No siege at ${target.name}`,
+        summary: 'The camp was gone before your troops arrived. They are marching home.',
+        townId: target.id,
+        siegeEndsAt: null,
+      })
+      removeMovement(state, movement.id)
+      return
+    }
     if (target.ownerId !== movement.ownerId) {
       sendHome(state, movement.ownerId, movement.originTownId, target, movement.units, emptyResources(), now)
       pushReport(state, {
@@ -275,10 +535,7 @@ function arrive(state: GameState, movement: Movement): void {
     return
   }
 
-  syncTownResources(target, now)
-  const loyaltyBefore = loyaltyAt(target.loyalty, target.loyaltyAt, now)
-  target.loyalty = loyaltyBefore
-  target.loyaltyAt = now
+  syncTown(state, target, now)
   const groups = [cloneUnits(target.units), ...target.support.map((group) => cloneUnits(group.units))]
   const defenders = combine(groups)
 
@@ -289,6 +546,7 @@ function arrive(state: GameState, movement: Movement): void {
     })
     const owner = ownerById(state, target.ownerId)
     const habit = result.revealed === 'full' && owner?.schedule ? habitBlurb(owner.schedule) : null
+    const camp = siegeOn(state, target.id)
     const scout = {
       success: result.success,
       townId: target.id,
@@ -299,7 +557,6 @@ function arrive(state: GameState, movement: Movement): void {
       resources: result.revealed === 'none' ? null : floorResources(target.resources),
       buildings: result.revealed === 'none' ? null : { ...target.buildings },
       units: result.revealed === 'full' ? cloneUnits(defenders) : null,
-      loyalty: result.revealed === 'none' ? null : Math.floor(target.loyalty),
       habit,
       points: result.revealed === 'none' ? null : townPoints(target),
     }
@@ -312,7 +569,7 @@ function arrive(state: GameState, movement: Movement): void {
       title: result.success ? `Scout of ${target.name}` : `Scouts lost at ${target.name}`,
       summary: result.success
         ? result.revealed === 'full'
-          ? 'A full picture: stores, buildings, garrison, and the lord’s hours.'
+          ? `A full picture: stores, buildings, and the garrison.${camp ? ' A siege camp is outside the walls.' : ''}`
           : 'A partial look. Stores and buildings, but the garrison stayed hidden.'
         : 'The scouts were caught. You learned nothing.',
       townId: target.id,
@@ -335,6 +592,34 @@ function arrive(state: GameState, movement: Movement): void {
     return
   }
 
+  if (siege && (movement.mission === 'attack' || movement.mission === 'siege')) {
+    if (movement.ownerId === siege.attackerOwnerId) {
+      addUnits(siege.units, movement.units)
+      pushReport(state, {
+        id: nid(state, 'r'),
+        ownerId: movement.ownerId,
+        at: now,
+        unread: true,
+        kind: 'siege',
+        title: `The siege of ${target.name} is reinforced`,
+        summary: 'More troops walked into the camp.',
+        townId: target.id,
+        siegeEndsAt: siege.endsAt,
+      })
+      removeMovement(state, movement.id)
+      return
+    }
+    const fought = fightCamp(state, siege, movement.units, origin.research, now)
+    const campGone = !siegeOn(state, target.id)
+    if (campGone && movement.mission === 'siege' && fought.attackerWins && canInvest(fought.attackerRemaining)) {
+      openSiege(state, target, movement.ownerId, movement.originTownId, fought.attackerRemaining, now)
+    } else if (hasUnits(fought.attackerRemaining)) {
+      sendHome(state, movement.ownerId, movement.originTownId, target, fought.attackerRemaining, emptyResources(), now)
+    }
+    removeMovement(state, movement.id)
+    return
+  }
+
   const rng = makeRng(state)
   const luck = (rng() * 2 - 1) * COMBAT.luckRange
   const sent = cloneUnits(movement.units)
@@ -348,7 +633,7 @@ function arrive(state: GameState, movement: Movement): void {
     catapultTarget: movement.catapultTarget,
   })
   const remainGroups = distributeLosses(groups, result.defenderLosses)
-  target.units = remainGroups[0] ?? cloneUnits(target.units)
+  target.units = remainGroups[0] ?? emptyUnits()
   target.support = target.support
     .map((group, index) => ({ ...group, units: remainGroups[index + 1] ?? group.units }))
     .filter((group) => hasUnits(group.units))
@@ -358,126 +643,68 @@ function arrive(state: GameState, movement: Movement): void {
   }
   clampStores(target)
 
-  let conquered = false
-  let noblesUsed = 0
-  const noblesAlive = result.attackerWins ? result.attackerRemaining.noble : 0
-  if (result.attackerWins && noblesAlive > 0) {
-    const drops = Array.from({ length: noblesAlive }, () => rollLoyaltyDrop(rng))
-    const impact = applyNobleImpact(target.loyalty, drops)
-    noblesUsed = noblesAlive
-    if (impact.conquered) {
-      conquered = true
-    } else {
-      target.loyalty = Math.max(0, impact.loyalty)
-      target.loyaltyAt = now
-    }
-  }
-
-  if (!conquered && result.attackerWins) {
+  const investing = result.attackerWins && movement.mission === 'siege' && canInvest(result.attackerRemaining)
+  if (result.attackerWins && !investing) {
     target.resources.wood = Math.max(0, target.resources.wood - result.loot.wood)
     target.resources.clay = Math.max(0, target.resources.clay - result.loot.clay)
     target.resources.iron = Math.max(0, target.resources.iron - result.loot.iron)
   }
 
-  const seized = conquered ? floorResources(target.resources) : result.loot
-  const battle: BattleView = {
-    attackerName: lordName(state, movement.ownerId),
-    defenderName: lordName(state, target.ownerId),
-    attackerTown: origin.name,
-    defenderTown: target.name,
-    fromX: origin.x,
-    fromY: origin.y,
-    toX: target.x,
-    toY: target.y,
-    luck,
-    attackerWins: result.attackerWins,
-    attackerUnits: unitLines(sent, result.attackerLosses),
-    defenderUnits: unitLines(defenders, result.defenderLosses),
-    loot: seized,
-    wallBefore: result.wallBefore,
-    wallAfter: conquered ? target.buildings.wall : result.wallAfter,
-    buildingTarget: result.buildingTarget,
-    buildingBefore: result.buildingBefore,
-    buildingAfter: result.buildingAfter,
-    loyaltyBefore: Math.round(loyaltyBefore),
-    loyaltyAfter: conquered ? COMBAT.loyalty.afterConquest : Math.max(0, Math.round(target.loyalty)),
-    conquered,
-    noblesUsed,
+  let siegeEndsAt: number | null = null
+  if (investing) {
+    const opened = openSiege(state, target, movement.ownerId, movement.originTownId, result.attackerRemaining, now)
+    siegeEndsAt = opened.endsAt
   }
+  const battle = battleFrom(state, movement, origin, target, sent, {
+    attackerWins: result.attackerWins,
+    attackerLosses: result.attackerLosses,
+    defenderLosses: result.defenderLosses,
+    defenderSent: defenders,
+    luck,
+  }, investing, siegeEndsAt)
+  battle.loot = investing ? emptyResources() : result.loot
+  battle.wallBefore = result.wallBefore
+  battle.wallAfter = result.wallAfter
+  battle.buildingTarget = result.buildingTarget
+  battle.buildingBefore = result.buildingBefore
+  battle.buildingAfter = result.buildingAfter
 
-  if (conquered) {
-    for (const group of [...target.support]) {
-      sendHome(state, group.ownerId, group.originTownId, target, group.units, emptyResources(), now)
-    }
-    const previousOwner = target.ownerId
-    const garrison = cloneUnits(result.attackerRemaining)
-    garrison.noble = 0
-    target.support = []
-    target.buildQueue = []
-    target.recruitQueues = emptyRecruitQueues()
-    target.researchJob = null
-    target.ownerId = movement.ownerId
-    target.loyalty = COMBAT.loyalty.afterConquest
-    target.loyaltyAt = now
-    target.units = garrison
-    const title = `${target.name} is taken`
-    pushReport(state, {
-      id: nid(state, 'r'),
-      ownerId: movement.ownerId,
-      at: now,
-      unread: true,
-      kind: 'conquest',
-      title,
-      summary: `${origin.name} broke the loyalty of ${target.name}. The stores and the walls are yours.`,
-      townId: target.id,
-      battle,
-    })
-    pushReport(state, {
-      id: nid(state, 'r'),
-      ownerId: previousOwner,
-      at: now,
-      unread: true,
-      kind: 'conquest',
-      title: `${target.name} fell`,
-      summary: `${lordName(state, movement.ownerId)} now holds ${target.name}.`,
-      townId: target.id,
-      battle,
-    })
-  } else {
-    const winner = result.attackerWins ? battle.attackerName : battle.defenderName
-    const summary = result.attackerWins
-      ? `${winner} carried off ${seized.wood} wood, ${seized.clay} clay, and ${seized.iron} iron.`
+  const winner = result.attackerWins ? battle.attackerName : battle.defenderName
+  const summary = investing
+    ? `${winner} beat the garrison and invested ${target.name}. The siege will hold if the camp is not broken.`
+    : result.attackerWins
+      ? movement.mission === 'siege'
+        ? `${winner} won, but the column was too light to invest ${target.name}. They carried off what they could.`
+        : `${winner} carried off ${result.loot.wood} wood, ${result.loot.clay} clay, and ${result.loot.iron} iron.`
       : `${winner} held ${target.name}. The attackers were beaten.`
-    pushReport(state, {
-      id: nid(state, 'r'),
-      ownerId: movement.ownerId,
-      at: now,
-      unread: true,
-      kind: 'battle',
-      title: result.attackerWins ? `Victory at ${target.name}` : `Defeat at ${target.name}`,
-      summary,
-      townId: target.id,
-      battle,
-    })
-    pushReport(state, {
-      id: nid(state, 'r'),
-      ownerId: target.ownerId,
-      at: now,
-      unread: true,
-      kind: 'battle',
-      title: result.attackerWins ? `${target.name} was raided` : `${target.name} held`,
-      summary,
-      townId: target.id,
-      battle,
-    })
-    if (hasUnits(result.attackerRemaining)) {
-      sendHome(state, movement.ownerId, movement.originTownId, target, result.attackerRemaining, result.attackerWins ? result.loot : emptyResources(), now)
-    }
+  pushReport(state, {
+    id: nid(state, 'r'),
+    ownerId: movement.ownerId,
+    at: now,
+    unread: true,
+    kind: 'battle',
+    title: result.attackerWins ? `Victory at ${target.name}` : `Defeat at ${target.name}`,
+    summary,
+    townId: target.id,
+    battle,
+  })
+  pushReport(state, {
+    id: nid(state, 'r'),
+    ownerId: target.ownerId,
+    at: now,
+    unread: true,
+    kind: 'battle',
+    title: investing ? `${target.name} is invested` : result.attackerWins ? `${target.name} was raided` : `${target.name} held`,
+    summary,
+    townId: target.id,
+    battle,
+  })
+  if (!investing && hasUnits(result.attackerRemaining)) {
+    sendHome(state, movement.ownerId, movement.originTownId, target, result.attackerRemaining, result.attackerWins ? result.loot : emptyResources(), now)
   }
 
   removeMovement(state, movement.id)
 }
-
 interface SimEvent {
   t: number
   prio: number
@@ -572,7 +799,9 @@ function nextEvent(state: GameState): SimEvent | null {
           const next = current?.orders[0]
           if (!current || !next) return
           current.orders.shift()
-          executeBotOrder(state, current, next)
+          if (next.type === 'sally') sally(state, next.townId)
+          else if (next.type === 'aid') callForAid(state, next.townId)
+          else executeBotOrder(state, current, next)
         },
         discard: () => {
           const current = ownerById(state, ownerId)
@@ -597,6 +826,21 @@ function nextEvent(state: GameState): SimEvent | null {
         },
       })
     }
+  }
+  for (const siege of state.sieges) {
+    const siegeId = siege.id
+    consider({
+      t: siege.endsAt,
+      prio: 1,
+      key: `siege:${siegeId}`,
+      run: () => {
+        const current = state.sieges.find((entry) => entry.id === siegeId)
+        if (current) captureTown(state, current, state.gameTime)
+      },
+      discard: () => {
+        state.sieges = state.sieges.filter((entry) => entry.id !== siegeId)
+      },
+    })
   }
   return best
 }
@@ -626,11 +870,8 @@ function simulate(state: GameState, target: number): void {
     event.run()
   }
   state.gameTime = target
-  syncAllResources(state.towns, target)
-  for (const town of state.towns) {
-    town.loyalty = loyaltyAt(town.loyalty, town.loyaltyAt, target)
-    town.loyaltyAt = target
-  }
+  syncAllResources(state, target)
+  state.aidCalls = state.aidCalls.filter((call) => call.expiresAt > target)
   ensurePlayer(state)
   trimReports(state)
 }
@@ -663,4 +904,79 @@ export function summarizeOffline(before: GameState, after: GameState): string[] 
 
 export function buildingLabel(id: BuildingId): string {
   return BUILDINGS[id].name
+}
+
+export function sally(state: GameState, townId: string): string | null {
+  const town = findTown(state, townId)
+  const siege = siegeOn(state, townId)
+  if (!town || !siege) return 'There is no siege to sally against.'
+  if (!hasUnits(town.units)) return 'The garrison is empty.'
+  const sent = cloneUnits(town.units)
+  town.units = emptyUnits()
+  const fought = fightCamp(state, siege, sent, town.research, state.gameTime)
+  if (hasUnits(fought.attackerRemaining)) addUnits(town.units, fought.attackerRemaining)
+  return null
+}
+
+export function withdrawSiege(state: GameState, siegeId: string): string | null {
+  const siege = state.sieges.find((entry) => entry.id === siegeId)
+  if (!siege) return 'That siege is already over.'
+  const town = findTown(state, siege.townId)
+  const units = cloneUnits(siege.units)
+  liftSiege(state, siege, state.gameTime, null)
+  if (town && hasUnits(units)) sendHome(state, siege.attackerOwnerId, siege.originTownId, town, units, emptyResources(), state.gameTime)
+  if (town) {
+    pushReport(state, {
+      id: nid(state, 'r'),
+      ownerId: siege.attackerOwnerId,
+      at: state.gameTime,
+      unread: true,
+      kind: 'siege',
+      title: `Siege of ${town.name} lifted`,
+      summary: 'The camp packed up and marched home.',
+      townId: town.id,
+      siegeEndsAt: null,
+    })
+    pushReport(state, {
+      id: nid(state, 'r'),
+      ownerId: town.ownerId,
+      at: state.gameTime,
+      unread: true,
+      kind: 'siege',
+      title: `The siege of ${town.name} lifted`,
+      summary: 'The besiegers marched away.',
+      townId: town.id,
+      siegeEndsAt: null,
+    })
+  }
+  return null
+}
+
+export function callForAid(state: GameState, townId: string): string | null {
+  const town = findTown(state, townId)
+  const siege = siegeOn(state, townId)
+  if (!town || !siege) return 'There is no siege to call aid for.'
+  if (siege.attackerOwnerId === town.ownerId) return 'That camp is yours.'
+  if (state.aidCalls.some((call) => call.townId === townId && call.expiresAt > state.gameTime)) {
+    return 'Riders are already looking for help.'
+  }
+  state.aidCalls.push({
+    id: nid(state, 'aid'),
+    townId,
+    ownerId: town.ownerId,
+    askedAt: state.gameTime,
+    expiresAt: siege.endsAt,
+  })
+  pushReport(state, {
+    id: nid(state, 'r'),
+    ownerId: town.ownerId,
+    at: state.gameTime,
+    unread: true,
+    kind: 'siege',
+    title: `Aid requested for ${town.name}`,
+    summary: 'Nearby lords hear of it when they next sit down. An asleep neighbor answers late, or not at all.',
+    townId,
+    siegeEndsAt: siege.endsAt,
+  })
+  return null
 }

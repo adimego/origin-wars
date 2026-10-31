@@ -27,10 +27,18 @@ export function merchantTravelMs(dist: number): number {
   return Math.max(WORLD.minActionMs, Math.round(mins * GAME_MINUTE_MS))
 }
 
-export function portionUnits(units: UnitCounts, portion: number, includeNoble: boolean): UnitCounts {
+function isSiegeKit(id: UnitId): boolean {
+  return id === 'commander' || id === 'ram' || id === 'catapult'
+}
+
+/** When keepSiegeKit is set, rams, catapults, and commanders all go. Otherwise they stay home. */
+export function portionUnits(units: UnitCounts, portion: number, keepSiegeKit: boolean): UnitCounts {
   const out = emptyUnits()
   for (const id of UNIT_IDS) {
-    if (id === 'noble' && !includeNoble) continue
+    if (isSiegeKit(id)) {
+      out[id] = keepSiegeKit ? units[id] : 0
+      continue
+    }
     const count = units[id] ?? 0
     out[id] = Math.min(count, Math.floor(count * portion))
   }
@@ -38,7 +46,7 @@ export function portionUnits(units: UnitCounts, portion: number, includeNoble: b
     let best: UnitId | null = null
     let bestCount = 0
     for (const id of UNIT_IDS) {
-      if (id === 'noble' && !includeNoble) continue
+      if (!keepSiegeKit && isSiegeKit(id)) continue
       if ((units[id] ?? 0) > bestCount) {
         best = id
         bestCount = units[id] ?? 0

@@ -2,7 +2,7 @@ import type { Chronotype, Difficulty, Personality } from '../config/ai.ts'
 import type { BuildingId, Resources, TrainBuilding, UnitId } from '../config/ids.ts'
 
 export type Phase = 'sleep' | 'busy' | 'active'
-export type Mission = 'attack' | 'support' | 'scout' | 'return' | 'trade'
+export type Mission = 'attack' | 'siege' | 'relief' | 'support' | 'scout' | 'return' | 'trade'
 export type UnitCounts = Record<UnitId, number>
 
 export interface BotSchedule {
@@ -61,10 +61,13 @@ export type BotOrder =
       fromTownId: string
       toTownId: string
       portion: number
-      includeNoble: boolean
+      mode: 'raid' | 'siege'
       catapultTarget: BuildingId | null
     }
   | { id: string; at: number; type: 'support'; fromTownId: string; toTownId: string; portion: number }
+  | { id: string; at: number; type: 'relief'; fromTownId: string; toTownId: string; portion: number }
+  | { id: string; at: number; type: 'sally'; townId: string }
+  | { id: string; at: number; type: 'aid'; townId: string }
   | { id: string; at: number; type: 'dodge'; fromTownId: string; toTownId: string }
 
 export interface Owner {
@@ -109,14 +112,32 @@ export interface SupportGroup {
   units: UnitCounts
 }
 
+export interface Siege {
+  id: string
+  townId: string
+  attackerOwnerId: string
+  originTownId: string
+  units: UnitCounts
+  startedAt: number
+  endsAt: number
+}
+
+export interface AidCall {
+  id: string
+  townId: string
+  ownerId: string
+  askedAt: number
+  expiresAt: number
+}
+
 export interface Town {
   id: string
   name: string
   x: number
   y: number
   ownerId: string
-  loyalty: number
-  loyaltyAt: number
+  /** 1 normally. Raised while a siege camp sits outside, and applied to new build and train times. */
+  workPace: number
   buildings: Record<BuildingId, number>
   buildQueue: BuildJob[]
   resources: Resources
@@ -170,10 +191,8 @@ export interface BattleView {
   buildingTarget: BuildingId | null
   buildingBefore: number
   buildingAfter: number
-  loyaltyBefore: number
-  loyaltyAfter: number
-  conquered: boolean
-  noblesUsed: number
+  invested: boolean
+  siegeEndsAt: number | null
 }
 
 export interface ScoutView {
@@ -186,7 +205,6 @@ export interface ScoutView {
   resources: Resources | null
   buildings: Record<BuildingId, number> | null
   units: UnitCounts | null
-  loyalty: number | null
   habit: string | null
   points: number | null
 }
@@ -196,17 +214,18 @@ export interface Report {
   ownerId: string
   at: number
   unread: boolean
-  kind: 'battle' | 'scout' | 'support' | 'return' | 'conquest' | 'trade' | 'system'
+  kind: 'battle' | 'scout' | 'support' | 'return' | 'siege' | 'trade' | 'system'
   title: string
   summary: string
   townId: string | null
   battle?: BattleView
   scout?: ScoutView
   trade?: { delivered: Resources; spilled: Resources; targetName: string }
+  siegeEndsAt?: number | null
 }
 
 export interface GameState {
-  version: 1
+  version: 2
   seed: number
   rngState: number
   speed: number
@@ -222,6 +241,8 @@ export interface GameState {
   owners: Owner[]
   towns: Town[]
   movements: Movement[]
+  sieges: Siege[]
+  aidCalls: AidCall[]
   reports: Report[]
 }
 

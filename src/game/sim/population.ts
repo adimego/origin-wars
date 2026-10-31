@@ -19,6 +19,9 @@ export function townPopulationUsed(town: Town, state: GameState): number {
       if (group.originTownId === town.id && group.ownerId === town.ownerId) pop += popOf(group.units)
     }
   }
+  for (const siege of state.sieges) {
+    if (siege.originTownId === town.id && siege.attackerOwnerId === town.ownerId) pop += popOf(siege.units)
+  }
   return pop
 }
 

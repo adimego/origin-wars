@@ -1,6 +1,6 @@
 import type { GameState } from './types.ts'
 
-const KEY = 'origin-wars-save-v1'
+const KEY = 'origin-wars-save-v2'
 
 export function saveGame(state: GameState): void {
   try {
@@ -15,7 +15,7 @@ export function loadGame(): GameState | null {
     const raw = localStorage.getItem(KEY)
     if (!raw) return null
     const parsed = JSON.parse(raw) as GameState
-    if (parsed.version !== 1 || !parsed.playerId || !Array.isArray(parsed.towns)) return null
+    if (parsed.version !== 2 || !parsed.playerId || !Array.isArray(parsed.towns) || !Array.isArray(parsed.sieges)) return null
     return parsed
   } catch {
     return null

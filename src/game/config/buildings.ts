@@ -58,7 +58,7 @@ export const BUILDINGS: Record<BuildingId, BuildingDef> = {
   iron: {
     id: 'iron',
     name: 'Iron mine',
-    blurb: 'A dark seam. Iron feeds spears, horseshoes, and noble coin.',
+    blurb: 'A dark seam. Iron feeds spears, rams, and the command hall.',
     maxLevel: 20,
     cost: res(48, 40, 55),
     costFactor: 1.42,
@@ -170,8 +170,8 @@ export const BUILDINGS: Record<BuildingId, BuildingDef> = {
   },
   academy: {
     id: 'academy',
-    name: 'Academy',
-    blurb: 'Trains a noble. A surviving noble chips loyalty off a town.',
+    name: 'Command hall',
+    blurb: 'Trains a commander. One commander, or a few rams and catapults, can invest a town after the field is won.',
     maxLevel: 3,
     cost: res(220, 260, 200),
     costFactor: 1.55,

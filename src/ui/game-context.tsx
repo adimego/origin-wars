@@ -3,7 +3,7 @@ import { flushSync } from 'react-dom'
 import type { BuildingId, ResourceKey, Resources, UnitId } from '@/game/config/ids.ts'
 import { hashSeed } from '@/game/sim/rng.ts'
 import { clearGame, loadGame, saveGame } from '@/game/sim/persist.ts'
-import { act, advance, projectGameTime, setWorldSpeed, summarizeOffline } from '@/game/sim/engine.ts'
+import { act, advance, callForAid, projectGameTime, sally, setWorldSpeed, summarizeOffline, withdrawSiege } from '@/game/sim/engine.ts'
 import { cancelLastBuild, enqueueBuilding } from '@/game/sim/buildings.ts'
 import { enqueueRecruit, startResearch } from '@/game/sim/recruit.ts'
 import { exchangeResources, sendArmy, shipResources } from '@/game/sim/commands.ts'
@@ -36,7 +36,10 @@ interface GameApi {
   cancelBuild: () => string | null
   recruit: (unitId: UnitId, count: number) => string | null
   research: (unitId: UnitId) => string | null
-  send: (fromId: string, toId: string, mission: 'attack' | 'support' | 'scout', units: Partial<UnitCounts>, catapultTarget: BuildingId | null) => string | null
+  send: (fromId: string, toId: string, mission: 'attack' | 'siege' | 'relief' | 'support' | 'scout', units: Partial<UnitCounts>, catapultTarget: BuildingId | null) => string | null
+  withdrawSiege: (siegeId: string) => string | null
+  sally: (townId: string) => string | null
+  callAid: (townId: string) => string | null
   exchange: (give: ResourceKey, receive: ResourceKey, amount: number) => string | null
   ship: (fromId: string, toId: string, cargo: Resources) => string | null
   markRead: (id: string) => void
@@ -172,6 +175,21 @@ export function GameProvider({ children }: { children: ReactNode }) {
       const from = draft.towns.find((town) => town.id === fromId)
       if (!from || from.ownerId !== draft.playerId) return 'You can only march from your own town.'
       return sendArmy(draft, fromId, toId, mission, units, catapultTarget)
+    }),
+    withdrawSiege: (siegeId) => run((draft) => {
+      const siege = draft.sieges.find((entry) => entry.id === siegeId)
+      if (!siege || siege.attackerOwnerId !== draft.playerId) return 'That camp is not yours.'
+      return withdrawSiege(draft, siegeId)
+    }),
+    sally: (townId) => run((draft) => {
+      const town = draft.towns.find((entry) => entry.id === townId)
+      if (!town || town.ownerId !== draft.playerId) return 'That is not your town.'
+      return sally(draft, townId)
+    }),
+    callAid: (townId) => run((draft) => {
+      const town = draft.towns.find((entry) => entry.id === townId)
+      if (!town || town.ownerId !== draft.playerId) return 'That is not your town.'
+      return callForAid(draft, townId)
     }),
     exchange: (give, receive, amount) => run((draft) => {
       const town = ownTown(draft)

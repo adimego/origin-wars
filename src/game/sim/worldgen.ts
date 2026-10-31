@@ -76,8 +76,7 @@ function baseTown(state: GameState, name: string, x: number, y: number, ownerId:
     x,
     y,
     ownerId,
-    loyalty: 100,
-    loyaltyAt: state.gameTime,
+    workPace: 1,
     buildings: emptyBuildings(),
     buildQueue: [],
     resources: emptyResources(),
@@ -188,7 +187,11 @@ function developBot(town: Town, personality: Personality, difficulty: Difficulty
     town.buildings.smithy = difficulty === 'hard' ? 2 : 1
     town.research.axe = 1
     town.buildings.barracks = difficulty === 'hard' ? 3 : 2
-    if (difficulty === 'hard') town.buildings.academy = 1
+    if (difficulty === 'hard') {
+      town.buildings.academy = 1
+      town.buildings.workshop = 1
+      give(town.units, { commander: 1, ram: 4 })
+    }
     town.buildings.wall = 1
     give(town.units, { axe: 14, spear: 10 })
   } else {
@@ -235,7 +238,7 @@ function blankOwner(id: string, name: string, kind: Owner['kind']): Owner {
 
 export function newGame(opts: { speed: number; seed: number; realNow: number; playerName: string }): GameState {
   const state: GameState = {
-    version: 1,
+    version: 2,
     seed: opts.seed >>> 0,
     rngState: (opts.seed || 1) >>> 0,
     speed: opts.speed,
@@ -251,6 +254,8 @@ export function newGame(opts: { speed: number; seed: number; realNow: number; pl
     owners: [blankOwner('player', opts.playerName.trim() || 'Warden', 'player'), blankOwner('wild', 'Unclaimed', 'barbarian')],
     towns: [],
     movements: [],
+    sieges: [],
+    aidCalls: [],
     reports: [],
   }
   const rng = makeRng(state)
@@ -317,7 +322,7 @@ export function newGame(opts: { speed: number; seed: number; realNow: number; pl
     kind: 'system',
     title: `${home.name} is yours`,
     summary:
-      'Timber, clay, and iron are already coming in. Raise a barracks, blood a company on an abandoned hamlet, then train a noble when you want a second town. Rival lords keep their own hours. They sleep, they wander off, and they do not answer the instant you march.',
+      'Timber, clay, and iron are already coming in. Raise a barracks and blood a company on an abandoned hamlet. To take a town, win the field with a commander or siege engines and hold the camp until the clock runs out. Rival lords keep their own hours. They sleep, they wander off, and they may answer a siege late.',
     townId: home.id,
   })
   return state

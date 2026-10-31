@@ -74,11 +74,33 @@ export const COMBAT = {
   scoutInfoRatio: 2,
   /** Each smithy level multiplies that unit’s combat stats. */
   researchBonusPerLevel: 0.08,
-  loyalty: {
-    minDrop: 28,
-    maxDrop: 40,
-    regenPerHour: 0.85,
-    start: 100,
-    afterConquest: 25,
-  },
+}
+
+/**
+ * Sieges are how a town changes hands. Win the field, then hold a camp
+ * until the clock runs out. All times are game-minutes.
+ */
+export const SIEGE = {
+  baseMinutes: 28,
+  minutesPerHq: 5,
+  minutesPerWall: 7,
+  minutesPerPoint: 0.6,
+  minMinutes: 18,
+  maxMinutes: 180,
+  /** Each point of siege weight shortens the clock by this fraction. */
+  shortenPerWeight: 0.025,
+  maxShorten: 0.5,
+  weight: { ram: 1, catapult: 2, commander: 4 },
+  /** Weight required, after the battle, to invest the town. */
+  minWeight: 3,
+  /** Population that must still be in the camp to keep or finish the siege. */
+  minHoldPop: 12,
+  /** Fields and pits produce this fraction of normal while invested. */
+  productionFactor: 0.3,
+  /** New construction and training take this many times longer. */
+  laborFactor: 2.5,
+  aidRadius: 14,
+  aidChance: { farmer: 0.4, raider: 0.1, defender: 0.72, expander: 0.22 },
+  /** Chance a bot who could raid will try to invest instead, if they have the weight. */
+  siegeChance: { farmer: 0.08, raider: 0.38, defender: 0.06, expander: 0.72 },
 }

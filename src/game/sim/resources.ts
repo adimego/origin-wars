@@ -1,22 +1,27 @@
+import { SIEGE } from '../config/world.ts'
 import { GAME_HOUR_MS } from './time.ts'
 import type { Resources } from '../config/ids.ts'
 import { RESOURCE_KEYS } from '../config/ids.ts'
 import type { Town } from './types.ts'
 import { storageCapacity, townProduction } from './formulas.ts'
 
-export function syncTownResources(town: Town, gameTime: number): void {
+export function syncTownResources(town: Town, gameTime: number, productionFactor = 1): void {
   if (gameTime <= town.resourcesAt) return
   const hours = (gameTime - town.resourcesAt) / GAME_HOUR_MS
   const rates = townProduction(town)
   const cap = storageCapacity(town.buildings.warehouse)
-  town.resources.wood = Math.min(cap, town.resources.wood + rates.wood * hours)
-  town.resources.clay = Math.min(cap, town.resources.clay + rates.clay * hours)
-  town.resources.iron = Math.min(cap, town.resources.iron + rates.iron * hours)
+  const pace = productionFactor
+  town.resources.wood = Math.min(cap, town.resources.wood + rates.wood * hours * pace)
+  town.resources.clay = Math.min(cap, town.resources.clay + rates.clay * hours * pace)
+  town.resources.iron = Math.min(cap, town.resources.iron + rates.iron * hours * pace)
   town.resourcesAt = gameTime
 }
 
-export function syncAllResources(towns: Town[], gameTime: number): void {
-  for (const town of towns) syncTownResources(town, gameTime)
+export function syncAllResources(state: { towns: Town[]; sieges: { townId: string }[] }, gameTime: number): void {
+  for (const town of state.towns) {
+    const besieged = state.sieges.some((siege) => siege.townId === town.id)
+    syncTownResources(town, gameTime, besieged ? SIEGE.productionFactor : 1)
+  }
 }
 
 export function payResources(stock: Resources, cost: Resources): void {

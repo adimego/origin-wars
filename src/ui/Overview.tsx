@@ -34,9 +34,7 @@ export function Overview() {
             {coords(town.x, town.y)}
           </span>
         </h1>
-        <p className="mt-1 text-sm text-muted">
-          {townPoints(town)} points · loyalty {Math.floor(town.loyalty)} · rates are per game hour
-        </p>
+        <p className="mt-1 text-sm text-muted">{townPoints(town)} points · rates are per game hour</p>
       </div>
 
       {incoming.length > 0 ? (
@@ -83,10 +81,9 @@ export function Overview() {
             {formatCount(pop)} / {formatCount(cap)}
           </p>
           <p className="mt-2 text-xs text-faint">The farm is the cap. Troops away from home still eat.</p>
-          <div className="mt-3 h-2 overflow-hidden rounded-full bg-ink">
-            <div className="h-full bg-brass" style={{ width: `${Math.min(100, town.loyalty)}%` }} />
-          </div>
-          <p className="mt-2 text-xs text-muted">Loyalty {Math.floor(town.loyalty)}. A noble chips at someone else’s.</p>
+          <p className="mt-3 text-xs text-muted">
+            A raid carries off goods. A siege stays. The town falls only if the camp is still standing when the clock ends.
+          </p>
         </Panel>
         <Panel title="What to do next">
           <ul className="space-y-2 text-sm">
@@ -209,6 +206,6 @@ function campaignGoals(state: NonNullable<ReturnType<typeof useGame>['state']>) 
     { id: 'barracks', label: 'Raise a barracks', done: towns.some((town) => town.buildings.barracks >= 1) },
     { id: 'company', label: 'Field a company of 8', done: troops >= 8 },
     { id: 'raid', label: 'Win a battle and bring something home', done: raided },
-    { id: 'second', label: 'Hold a second town', done: towns.length >= 2 },
+    { id: 'second', label: 'Hold a siege until a second town falls', done: towns.length >= 2 },
   ]
 }

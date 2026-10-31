@@ -1,7 +1,7 @@
 import type { Resources, TrainBuilding, UnitId } from './ids.ts'
 import { res } from './ids.ts'
 
-export type UnitClass = 'infantry' | 'cavalry' | 'siege' | 'scout' | 'noble'
+export type UnitClass = 'infantry' | 'cavalry' | 'siege' | 'scout' | 'command'
 
 export interface UnitDef {
   id: UnitId
@@ -215,22 +215,22 @@ export const UNITS: Record<UnitId, UnitDef> = {
     researchTimeBaseMs: 26 * M,
     researchTimeFactor: 1.45,
   },
-  noble: {
-    id: 'noble',
-    name: 'Noble',
-    blurb: 'Must survive the fight. Each one cuts a chunk of loyalty. At zero, the town is yours.',
-    attack: 30,
-    defInfantry: 100,
-    defCavalry: 50,
-    defScout: 20,
+  commander: {
+    id: 'commander',
+    name: 'Commander',
+    blurb: 'Plants the banner. One commander is enough siege weight to invest a town you have already beaten. The camp must still be standing when the clock ends.',
+    attack: 25,
+    defInfantry: 80,
+    defCavalry: 40,
+    defScout: 12,
     scoutAttack: 0,
-    speed: 0.65,
+    speed: 0.7,
     carry: 0,
-    pop: 80,
-    cost: res(900, 900, 800),
-    trainBaseMs: 30 * M,
+    pop: 36,
+    cost: res(650, 600, 520),
+    trainBaseMs: 22 * M,
     trainBuilding: 'academy',
-    unitClass: 'noble',
+    unitClass: 'command',
     requiresResearch: false,
     researchMax: 0,
     researchCost: res(0, 0, 0),

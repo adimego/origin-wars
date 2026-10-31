@@ -8,8 +8,7 @@ export function makeTown(partial: Partial<Town> & { id: string; ownerId: string 
     name: partial.name ?? partial.id,
     x: partial.x ?? 0,
     y: partial.y ?? 0,
-    loyalty: partial.loyalty ?? 100,
-    loyaltyAt: partial.loyaltyAt ?? 0,
+    workPace: partial.workPace ?? 1,
     buildings: partial.buildings ?? emptyBuildings(),
     buildQueue: partial.buildQueue ?? [],
     resources: partial.resources ?? { wood: 0, clay: 0, iron: 0 },
@@ -40,7 +39,7 @@ export function makeOwner(partial: Partial<Owner> & { id: string; kind: Owner['k
 
 export function makeState(): GameState {
   return {
-    version: 1,
+    version: 2,
     seed: 1,
     rngState: 1,
     speed: 1,
@@ -56,6 +55,8 @@ export function makeState(): GameState {
     owners: [makeOwner({ id: 'player', kind: 'player', name: 'Warden' })],
     towns: [],
     movements: [],
+    sieges: [],
+    aidCalls: [],
     reports: [],
   }
 }

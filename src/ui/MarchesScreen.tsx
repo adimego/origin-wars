@@ -20,6 +20,23 @@ export function MarchesScreen() {
         <h1 className="font-display text-3xl">Marches</h1>
         <p className="mt-1 text-sm text-muted">Travel time is distance times the slowest unit. A returning column uses whoever survived.</p>
       </div>
+      {state.sieges.length > 0 ? (
+        <Panel title="Siege camps">
+          <ul className="space-y-3 text-sm">
+            {state.sieges
+              .filter((siege) => siege.attackerOwnerId === state.playerId || state.towns.some((town) => town.id === siege.townId && town.ownerId === state.playerId))
+              .map((siege) => {
+                const town = state.towns.find((entry) => entry.id === siege.townId)
+                return (
+                  <li key={siege.id}>
+                    <p className="font-medium">{siege.attackerOwnerId === state.playerId ? 'Your camp' : 'Enemy camp'} at {town?.name}</p>
+                    <p className="text-muted">{formatReal(realLeft(state, realNow, siege.endsAt))} until the town falls, if the camp still holds.</p>
+                  </li>
+                )
+              })}
+          </ul>
+        </Panel>
+      ) : null}
       <div className="grid gap-4 lg:grid-cols-2">
         <Panel title="Outbound">
           {outgoing.length === 0 ? <p className="text-sm text-muted">No one is on the road.</p> : <List movements={outgoing} />}

@@ -13,7 +13,7 @@ export function TownsScreen() {
     return (
       <div>
         <h1 className="font-display text-3xl">Towns</h1>
-        <p className="mt-3 text-sm text-muted">You hold nothing. A noble is how a town changes hands, and you no longer have one to send.</p>
+        <p className="mt-3 text-sm text-muted">You hold nothing. A siege that holds until the clock ends is how a town changes hands.</p>
       </div>
     )
   }
@@ -36,7 +36,8 @@ export function TownsScreen() {
                 {town.name} <span className="num text-sm text-brass">{coords(town.x, town.y)}</span>
               </h2>
               <p className="mt-1 text-sm text-muted">
-                {townPoints(town)} points · loyalty {Math.floor(town.loyalty)} · {troops} troops at home
+                {townPoints(town)} points · {troops} troops at home
+                {state.sieges.some((siege) => siege.townId === town.id) ? ' · under siege' : ''}
               </p>
               <p className="num mt-2 text-xs text-faint">
                 +{formatRate(rates.wood)} / +{formatRate(rates.clay)} / +{formatRate(rates.iron)} per game hour · pop{' '}

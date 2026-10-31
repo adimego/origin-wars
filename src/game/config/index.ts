@@ -1,6 +1,6 @@
 import { AI_CONFIG } from './ai.ts'
 import { BUILDINGS } from './buildings.ts'
-import { COMBAT, WORLD } from './world.ts'
+import { COMBAT, SIEGE, WORLD } from './world.ts'
 import { UNITS } from './units.ts'
 
 export const BALANCE = {
@@ -8,6 +8,7 @@ export const BALANCE = {
   units: UNITS,
   world: WORLD,
   combat: COMBAT,
+  siege: SIEGE,
   ai: AI_CONFIG,
 }
 

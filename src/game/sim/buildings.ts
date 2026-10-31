@@ -1,6 +1,6 @@
 import { BUILDINGS } from '../config/buildings.ts'
 import type { BuildingId } from '../config/ids.ts'
-import { WORLD } from '../config/world.ts'
+import { SIEGE, WORLD } from '../config/world.ts'
 import {
   buildCost,
   buildTimeMs,
@@ -34,7 +34,7 @@ export function explainBuild(town: Town, buildingId: BuildingId): string | null 
 export function enqueueBuilding(state: GameState, townId: string, buildingId: BuildingId): string | null {
   const town = findTown(state, townId)
   if (!town) return 'That town is gone.'
-  syncTownResources(town, state.gameTime)
+  syncTownResources(town, state.gameTime, town.workPace > 1 ? SIEGE.productionFactor : 1)
   const reason = explainBuild(town, buildingId)
   if (reason) return reason
   const levels = effectiveLevels(town)
@@ -51,7 +51,7 @@ export function cancelLastBuild(state: GameState, townId: string): string | null
   if (!town) return 'That town is gone.'
   const job = town.buildQueue[town.buildQueue.length - 1]
   if (!job) return 'Nothing is queued.'
-  syncTownResources(town, state.gameTime)
+  syncTownResources(town, state.gameTime, town.workPace > 1 ? SIEGE.productionFactor : 1)
   const active = town.buildQueue[0] === job && job.completesAt != null
   const fraction = active ? WORLD.activeCancelRefund : 1
   const cap = storageCapacity(town.buildings.warehouse)
@@ -76,14 +76,15 @@ export function startNextBuild(town: Town, now: number): void {
     return
   }
   const hq = town.buildings.headquarters
-  job.completesAt = now + buildTimeMs(job.buildingId, job.targetLevel, hq)
+  const pace = town.workPace > 0 ? town.workPace : 1
+  job.completesAt = now + Math.round(buildTimeMs(job.buildingId, job.targetLevel, hq) * pace)
 }
 
 /** Apply one finished build. Returns true if a job completed. */
 export function completeBuild(town: Town, now: number): boolean {
   const job = town.buildQueue[0]
   if (!job?.completesAt || job.completesAt > now) return false
-  syncTownResources(town, job.completesAt)
+  syncTownResources(town, job.completesAt, town.workPace > 1 ? SIEGE.productionFactor : 1)
   town.buildings[job.buildingId] = job.targetLevel
   town.buildQueue.shift()
   startNextBuild(town, job.completesAt)

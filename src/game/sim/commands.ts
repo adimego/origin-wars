@@ -1,10 +1,11 @@
-import { WORLD } from '../config/world.ts'
 import { RESOURCE_KEYS, UNIT_IDS, type BuildingId, type ResourceKey, type Resources } from '../config/ids.ts'
+import { SIEGE, WORLD } from '../config/world.ts'
 import { storageCapacity } from './formulas.ts'
 import { distance, merchantTravelMs, normalizeOrder, travelMs } from './movement.ts'
 import { hasUnits } from './defaults.ts'
 import { findTown } from './buildings.ts'
 import { payResources, syncTownResources } from './resources.ts'
+import { siegeWeight } from './siege.ts'
 import { emptyResources } from './defaults.ts'
 import { nid, type GameState, type UnitCounts } from './types.ts'
 
@@ -20,7 +21,7 @@ export function sendArmy(
   state: GameState,
   fromId: string,
   toId: string,
-  mission: 'attack' | 'support' | 'scout',
+  mission: 'attack' | 'siege' | 'relief' | 'support' | 'scout',
   requested: Partial<UnitCounts>,
   catapultTarget: BuildingId | null,
 ): string | null {
@@ -29,8 +30,19 @@ export function sendArmy(
   if (!from || !to) return 'That town is gone.'
   if (from.buildings.rally < 1) return 'Build a rally point before marching.'
   if (from.id === to.id) return 'Those troops are already home.'
-  if (mission === 'attack' && from.ownerId === to.ownerId) return 'You cannot attack your own town.'
+  if ((mission === 'attack' || mission === 'siege') && from.ownerId === to.ownerId) return 'You cannot attack your own town.'
   if (mission === 'support' && from.ownerId !== to.ownerId) return 'Support can only reinforce your own towns.'
+  if (mission === 'relief') {
+    const siege = state.sieges.find((entry) => entry.townId === to.id)
+    if (!siege) return 'That town is not under siege.'
+    if (siege.attackerOwnerId === from.ownerId) return 'That camp is yours. March more troops as a siege to reinforce it.'
+  }
+  if (mission === 'siege') {
+    const unitsPreview = normalizeOrder(requested)
+    if (siegeWeight(unitsPreview) < SIEGE.minWeight) {
+      return 'A siege needs a commander, or enough rams and catapults to invest the town.'
+    }
+  }
   const units = normalizeOrder(requested)
   if (mission === 'scout') {
     for (const id of UNIT_IDS) {
@@ -76,7 +88,7 @@ export function exchangeResources(
   if (give === receive) return 'Choose two different resources.'
   const whole = Math.floor(amount)
   if (whole < WORLD.market.minShipment) return `Trade at least ${WORLD.market.minShipment}.`
-  syncTownResources(town, state.gameTime)
+  syncTownResources(town, state.gameTime, town.workPace > 1 ? SIEGE.productionFactor : 1)
   if (town.resources[give] + 1e-6 < whole) return 'Not enough to trade.'
   const gain = Math.floor(whole * (1 - WORLD.market.loss))
   if (gain <= 0) return 'That shipment is too small after the merchant’s cut.'
@@ -105,7 +117,7 @@ export function shipResources(
   }
   const total = whole.wood + whole.clay + whole.iron
   if (total < WORLD.market.minShipment) return `Send at least ${WORLD.market.minShipment} goods.`
-  syncTownResources(from, state.gameTime)
+  syncTownResources(from, state.gameTime, from.workPace > 1 ? SIEGE.productionFactor : 1)
   for (const key of RESOURCE_KEYS) {
     if (from.resources[key] + 1e-6 < whole[key]) return 'Not enough in the warehouse.'
   }

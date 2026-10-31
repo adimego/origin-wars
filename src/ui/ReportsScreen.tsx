@@ -85,10 +85,10 @@ function ReportBody({ report }: { report: Report }) {
               {BUILDINGS[report.battle.buildingTarget].name} {report.battle.buildingBefore} → {report.battle.buildingAfter}.
             </p>
           ) : null}
-          {report.battle.noblesUsed > 0 ? (
+          {report.battle.invested ? (
             <p>
-              Nobles surviving the fight: {report.battle.noblesUsed}. Loyalty {report.battle.loyaltyBefore} → {report.battle.loyaltyAfter}.
-              {report.battle.conquered ? ' The town changed hands.' : ''}
+              The column invested the town.
+              {report.battle.siegeEndsAt != null ? ` The camp stands until ${gameClock(report.battle.siegeEndsAt)}.` : ''}
             </p>
           ) : null}
         </div>
@@ -100,7 +100,7 @@ function ReportBody({ report }: { report: Report }) {
             <p>
               Stores {Math.floor(report.scout.resources.wood)} / {Math.floor(report.scout.resources.clay)} /{' '}
               {Math.floor(report.scout.resources.iron)}
-              {report.scout.loyalty != null ? ` · loyalty ${report.scout.loyalty}` : ''}
+              {report.siegeEndsAt != null ? ` · siege until ${gameClock(report.siegeEndsAt)}` : ''}
               {report.scout.points != null ? ` · ${report.scout.points} points` : ''}
             </p>
           ) : null}

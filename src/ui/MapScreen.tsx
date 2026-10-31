@@ -152,7 +152,7 @@ function TownPanel({
           {owner.schedule.chronotype ? ` ${CHRONOTYPE_LABEL[owner.schedule.chronotype]}.` : ''}
         </p>
       ) : null}
-      <p className="text-muted">{townPoints(town)} points{mine || wild ? ` · loyalty ${Math.floor(town.loyalty)}` : ''}</p>
+      <p className="text-muted">{townPoints(town)} points</p>
       {wild ? (
         troops.length === 0 ? (
           <p className="text-moss">Abandoned fields. The stores are still there.</p>
@@ -169,14 +169,24 @@ function TownPanel({
       {scout?.resources ? (
         <p className="num text-xs text-faint">
           Scouted stores {formatCount(scout.resources.wood)} / {formatCount(scout.resources.clay)} / {formatCount(scout.resources.iron)}
-          {scout.loyalty != null ? ` · loyalty ${scout.loyalty}` : ''}
+          {state.sieges.some((siege) => siege.townId === town.id) ? ' · siege camp outside' : ''}
         </p>
       ) : null}
       {scout?.habit ? <p className="text-xs text-muted">{scout.habit}</p> : null}
       <div className="flex flex-wrap gap-2 pt-1">
         {!mine ? (
-          <Button size="sm" onClick={() => onOrder('attack')}>
-            Attack
+          <Button size="sm" variant="secondary" onClick={() => onOrder('attack')}>
+            Raid
+          </Button>
+        ) : null}
+        {!mine ? (
+          <Button size="sm" onClick={() => onOrder('siege')}>
+            Besiege
+          </Button>
+        ) : null}
+        {state.sieges.some((siege) => siege.townId === town.id && siege.attackerOwnerId !== state.playerId) ? (
+          <Button size="sm" onClick={() => onOrder('relief')}>
+            Send relief
           </Button>
         ) : null}
         {mine && town.id !== home.id ? (

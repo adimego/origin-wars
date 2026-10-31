@@ -18,7 +18,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/compone
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip.tsx'
 import { useState } from 'react'
 import { BuildingsScreen } from './BuildingsScreen.tsx'
-import { clockNow, coords, formatCount, formatRate } from './format.ts'
+import { clockNow, coords, formatCount, formatRate, formatReal, realLeft } from './format.ts'
 import { useGame, type Screen } from './game-context.tsx'
 import { MapScreen } from './MapScreen.tsx'
 import { MarchesScreen } from './MarchesScreen.tsx'
@@ -39,8 +39,9 @@ const NAV: { id: Screen; label: string; icon: ComponentType<{ className?: string
 ]
 
 export function Shell() {
-  const { state, realNow, screen, setScreen, catchup, dismissCatchup, selectTown, setSpeed, abandon } = useGame()
+  const { state, realNow, screen, setScreen, catchup, dismissCatchup, selectTown, setSpeed, abandon, withdrawSiege, sally, callAid } = useGame()
   const [leaving, setLeaving] = useState(false)
+  const [notice, setNotice] = useState<string | null>(null)
   if (!state) return null
   const town = state.towns.find((entry) => entry.id === state.selectedTownId) ?? state.towns.find((entry) => entry.ownerId === state.playerId)
   const owned = state.towns.filter((entry) => entry.ownerId === state.playerId)
@@ -142,6 +143,44 @@ export function Shell() {
           </div>
         </div>
       ) : null}
+
+      {state.sieges
+        .filter((siege) => state.towns.some((town) => town.id === siege.townId && (town.ownerId === state.playerId || siege.attackerOwnerId === state.playerId)))
+        .map((siege) => {
+          const town = state.towns.find((entry) => entry.id === siege.townId)
+          const mine = siege.attackerOwnerId === state.playerId
+          return (
+            <div key={siege.id} className={`border-b px-4 py-3 text-sm ${mine ? 'border-brass-dim bg-brass/10' : 'border-blood/40 bg-blood/15'}`}>
+              <p className="font-medium">
+                {mine ? `You are besieging ${town?.name ?? 'a town'}` : `${town?.name ?? 'A town'} is under siege`}
+                <span className="num"> · {formatReal(realLeft(state, realNow, siege.endsAt))} left</span>
+              </p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {town && !mine ? (
+                  <Button size="sm" onClick={() => selectTown(town.id, true)}>
+                    Open town
+                  </Button>
+                ) : null}
+                {town && !mine ? (
+                  <Button size="sm" variant="secondary" onClick={() => setNotice(sally(town.id))}>
+                    Sally
+                  </Button>
+                ) : null}
+                {town && !mine ? (
+                  <Button size="sm" variant="secondary" onClick={() => setNotice(callAid(town.id))}>
+                    Call for aid
+                  </Button>
+                ) : null}
+                {mine ? (
+                  <Button size="sm" variant="secondary" onClick={() => setNotice(withdrawSiege(siege.id))}>
+                    Lift siege
+                  </Button>
+                ) : null}
+                {notice ? <p className="w-full text-xs text-blood">{notice}</p> : null}
+              </div>
+            </div>
+          )
+        })}
 
       {state.defeated ? (
         <div className="border-b border-blood/40 bg-blood/15 px-4 py-3 text-sm">

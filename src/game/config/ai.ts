@@ -206,7 +206,7 @@ export const AI_CONFIG = {
       playerBias: 8,
       weakBias: 2.2,
       targetNoise: 5,
-      preferredUnits: ['axe', 'light', 'spear', 'noble', 'ram'] as UnitId[],
+      preferredUnits: ['axe', 'light', 'spear', 'commander', 'ram'] as UnitId[],
       buildWeights: {
         academy: 9,
         headquarters: 8,

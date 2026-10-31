@@ -29,7 +29,7 @@ export const UNIT_IDS = [
   'heavy',
   'ram',
   'catapult',
-  'noble',
+  'commander',
 ] as const
 export type UnitId = (typeof UNIT_IDS)[number]
 

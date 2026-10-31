@@ -24,7 +24,7 @@ export function RecruitScreen() {
         <h1 className="font-display text-3xl">Recruit</h1>
         <p className="mt-1 max-w-2xl text-sm text-muted">
           Spears hold cavalry. Swords hold infantry. Axes and light cavalry take ground and loot. Scouts buy you a look.
-          A noble has to live through the fight to cut loyalty.
+          A commander, or enough rams and catapults, lets a winning army invest the town and sit out a siege.
         </p>
       </div>
       {note ? <p className="text-sm text-blood">{note}</p> : null}

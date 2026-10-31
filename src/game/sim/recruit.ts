@@ -1,5 +1,6 @@
 import { BUILDINGS } from '../config/buildings.ts'
 import type { UnitId } from '../config/ids.ts'
+import { SIEGE } from '../config/world.ts'
 import { UNITS } from '../config/units.ts'
 import { missingResource, researchCost, researchTimeMs, resourceName, trainTimeMs } from './formulas.ts'
 import { freePopulation } from './population.ts'
@@ -41,7 +42,7 @@ export function enqueueRecruit(state: GameState, townId: string, unitId: UnitId,
   const town = findTown(state, townId)
   if (!town) return 'That town is gone.'
   const whole = Math.floor(count)
-  syncTownResources(town, state.gameTime)
+  syncTownResources(town, state.gameTime, town.workPace > 1 ? SIEGE.productionFactor : 1)
   const reason = explainRecruit(state, town, unitId, whole)
   if (reason) return reason
   const unit = UNITS[unitId]
@@ -50,7 +51,8 @@ export function enqueueRecruit(state: GameState, townId: string, unitId: UnitId,
     clay: unit.cost.clay * whole,
     iron: unit.cost.iron * whole,
   })
-  const perUnitMs = trainTimeMs(unitId, town.buildings[unit.trainBuilding])
+  const pace = town.workPace > 0 ? town.workPace : 1
+  const perUnitMs = Math.round(trainTimeMs(unitId, town.buildings[unit.trainBuilding]) * pace)
   const existing = town.recruitQueues[unit.trainBuilding]
   if (existing && existing.unitId === unitId) {
     existing.remaining += whole
@@ -93,16 +95,17 @@ export function explainResearch(town: Town, unitId: UnitId): string | null {
 export function startResearch(state: GameState, townId: string, unitId: UnitId): string | null {
   const town = findTown(state, townId)
   if (!town) return 'That town is gone.'
-  syncTownResources(town, state.gameTime)
+  syncTownResources(town, state.gameTime, town.workPace > 1 ? SIEGE.productionFactor : 1)
   const reason = explainResearch(town, unitId)
   if (reason) return reason
   const target = (town.research[unitId] ?? 0) + 1
   const cost = researchCost(unitId, target)
   payResources(town.resources, cost)
+  const pace = town.workPace > 0 ? town.workPace : 1
   town.researchJob = {
     unitId,
     targetLevel: target,
-    completesAt: state.gameTime + researchTimeMs(unitId, target, town.buildings.smithy),
+    completesAt: state.gameTime + Math.round(researchTimeMs(unitId, target, town.buildings.smithy) * pace),
     cost,
   }
   return null
