@@ -1,0 +1,58 @@
+@import "tailwindcss";
+
+@theme {
+  --font-display: "Cinzel", "Palatino Linotype", Palatino, serif;
+  --font-sans: "Outfit", "Avenir Next", "Segoe UI", sans-serif;
+  --color-ink: #100e0c;
+  --color-panel: #1c1713;
+  --color-panel-2: #282017;
+  --color-line: #4d3e32;
+  --color-brass: #e2b45a;
+  --color-brass-2: #f3d7a1;
+  --color-brass-dim: #8d6b34;
+  --color-parchment: #f4ecdf;
+  --color-muted: #b4a492;
+  --color-faint: #7e7266;
+  --color-wood: #e0b56a;
+  --color-clay: #e08a4f;
+  --color-iron: #c5d2e0;
+  --color-moss: #9dbe7a;
+  --color-blood: #d4654f;
+  --color-water: #183445;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background:
+    radial-gradient(1100px 640px at 8% -10%, rgba(226, 180, 90, 0.09), transparent 55%),
+    radial-gradient(800px 520px at 110% 0%, rgba(36, 72, 52, 0.4), transparent 50%),
+    #100e0c;
+  color: var(--color-parchment);
+  font-family: var(--font-sans);
+}
+
+button,
+input,
+select {
+  font-family: inherit;
+}
+
+::selection {
+  background: rgba(226, 180, 90, 0.35);
+  color: #fff8ea;
+}
+
+:focus-visible {
+  outline: 2px solid #e2b45a;
+  outline-offset: 2px;
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+}
