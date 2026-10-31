@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { SIEGE } from '../config/world.ts'
+import { SIEGE, WORLD } from '../config/world.ts'
 import { sendArmy } from './commands.ts'
 import { BUILDINGS } from '../config/buildings.ts'
 import { productionPerHour } from './formulas.ts'
@@ -21,6 +21,23 @@ describe('sieges', () => {
     expect(invested).toBeLessThan(city)
     expect(hamlet).toBeGreaterThanOrEqual(SIEGE.minMinutes * 60_000)
     expect(city).toBeLessThanOrEqual(SIEGE.maxMinutes * 60_000)
+    expect(city).toBeGreaterThan(hamlet * 2)
+  })
+
+  it('stays at least 20 real minutes at standard speed, even with the biggest weight cut', () => {
+    const standard = 20
+    const shortest = siegeDurationMs({ hq: 0, wall: 0, points: 0, weight: 10_000 })
+    const hamlet = siegeDurationMs({ hq: 1, wall: 0, points: 8, weight: 10_000 })
+    const realMinutes = (gameMs: number) => gameMs / standard / 60_000
+    expect(realMinutes(shortest)).toBeGreaterThanOrEqual(20)
+    expect(realMinutes(hamlet)).toBeGreaterThanOrEqual(20)
+    expect(shortest).toBe(SIEGE.minMinutes * 60_000)
+  })
+
+  it('leaves room for a neighbor to march relief during a minimum siege', () => {
+    const shortest = siegeDurationMs({ hq: 0, wall: 0, points: 0, weight: 10_000 })
+    const infantryMarch = SIEGE.aidRadius * WORLD.minutesPerField * 60_000
+    expect(shortest).toBeGreaterThan(infantryMarch * 2)
   })
 
   it('treats one commander, or three rams, as enough weight to invest', () => {

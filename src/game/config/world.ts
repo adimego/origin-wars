@@ -79,14 +79,19 @@ export const COMBAT = {
 /**
  * Sieges are how a town changes hands. Win the field, then hold a camp
  * until the clock runs out. All times are game-minutes.
+ *
+ * At Standard speed (20×), 400 game-minutes is 20 real minutes. minMinutes
+ * is that floor and still applies after the maximum siege-weight cut.
+ * The other terms are the old curve scaled by 400/18, so a developed town
+ * runs for a few real hours and Blitz (120×) stays six times faster.
  */
 export const SIEGE = {
-  baseMinutes: 28,
-  minutesPerHq: 5,
-  minutesPerWall: 7,
-  minutesPerPoint: 0.6,
-  minMinutes: 18,
-  maxMinutes: 180,
+  baseMinutes: 622,
+  minutesPerHq: 111,
+  minutesPerWall: 156,
+  minutesPerPoint: 13.3,
+  minMinutes: 400,
+  maxMinutes: 4000,
   /** Each point of siege weight shortens the clock by this fraction. */
   shortenPerWeight: 0.025,
   maxShorten: 0.5,

@@ -88,11 +88,11 @@ All of these live in `SIEGE` inside `src/game/config/world.ts`. Times are game-m
 
 | Knob | Value |
 | --- | --- |
-| Base duration | 28 min |
-| Per headquarters level | +5 min |
-| Per wall level | +7 min |
-| Per town point | +0.6 min |
-| Clamp | 18–180 min |
+| Base duration | 622 min |
+| Per headquarters level | +111 min |
+| Per wall level | +156 min |
+| Per town point | +13.3 min |
+| Clamp | 400–4000 min |
 | Weight | ram 1, catapult 2, commander 4 |
 | Shorten | 2.5% per weight point, capped at 50% |
 | Minimum weight to invest | 3 (one commander, or three rams, or a catapult and a ram) |
@@ -101,7 +101,7 @@ All of these live in `SIEGE` inside `src/game/config/world.ts`. Times are game-m
 | New build and train time | ×2.5 |
 | Aid radius | 14 fields |
 
-A level-1 hamlet with 8 points and no wall is about 38 game-minutes with no engines, and about 34 with one commander (weight 4). A town with headquarters 8, wall 8, and 40 points is about 148 game-minutes, or about 89 if the camp has 16 weight. At Standard (20×) that is roughly two to seven real minutes. At Blitz (120×) a small siege is under half a minute.
+At Standard (20×), the floor is 20 real minutes and still holds after the 50% siege-weight cut. A level-1 hamlet with 8 points and no wall is about 42 real minutes with no engines, and about 38 with one commander. A town with headquarters 8, wall 8, and 40 points is about 2 hours 45 minutes, or about 1 hour 40 minutes if the camp has 16 weight. The cap is 3 hours 20 minutes. Blitz (120×) is six times faster, so the same floor is about 3 real minutes 20 seconds.
 
 Chance a bot who could raid will invest instead, if they have the weight: steward 8%, raider 38%, castellan 6%, claimant 72%. Chance they ride to help someone else’s call: steward 40%, raider 10%, castellan 72%, claimant 22%.
 
