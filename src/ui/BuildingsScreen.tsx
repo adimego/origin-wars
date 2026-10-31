@@ -1,21 +1,13 @@
 import { useState } from 'react'
 import { BUILDINGS, BUILDING_GROUPS } from '@/game/config/buildings.ts'
 import type { BuildingId, ResourceKey } from '@/game/config/ids.ts'
-import { COMBAT, WORLD } from '@/game/config/world.ts'
-import { explainBuild } from '@/game/sim/buildings.ts'
-import {
-  buildCost,
-  buildTimeMs,
-  populationCapacity,
-  productionPerHour,
-  queueSlots,
-  requirementText,
-  storageCapacity,
-} from '@/game/sim/formulas.ts'
+import { WORLD } from '@/game/config/world.ts'
+import { queueSlots } from '@/game/sim/formulas.ts'
 import { Button } from '@/components/ui/button.tsx'
 import { Input } from '@/components/ui/input.tsx'
-import { CostLine, Panel } from './bits.tsx'
-import { formatCount, formatRate, formatReal, realLeft } from './format.ts'
+import { Panel } from './bits.tsx'
+import { BuildingDetail } from './building-detail.tsx'
+import { formatReal, realLeft } from './format.ts'
 import { useGame } from './game-context.tsx'
 
 export function BuildingsScreen() {
@@ -133,58 +125,9 @@ export function BuildingsScreen() {
 }
 
 function BuildingCard({ id, onBuild }: { id: BuildingId; onBuild: (id: BuildingId) => void }) {
-  const { state } = useGame()
-  if (!state) return null
-  const town = state.towns.find((entry) => entry.id === state.selectedTownId)
-  if (!town) return null
-  const def = BUILDINGS[id]
-  const level = town.buildings[id]
-  const maxed = level >= def.maxLevel
-  const reason = maxed ? null : explainBuild(town, id)
-  const cost = maxed ? null : buildCost(id, level + 1)
-  const time = maxed ? 0 : buildTimeMs(id, level + 1, town.buildings.headquarters)
-  const req = requirementText(id)
-
   return (
     <article className="rounded-lg border border-line bg-panel p-4">
-      <div className="flex items-baseline justify-between gap-3">
-        <h3 className="font-medium">{def.name}</h3>
-        <span className="num text-sm text-brass">Lv {level}</span>
-      </div>
-      <p className="mt-1 text-sm text-muted">{def.blurb}</p>
-      <p className="mt-2 text-xs text-faint">{effectLine(id, level)}</p>
-      {req ? <p className="mt-2 text-xs text-faint">Requires {req}</p> : null}
-      {cost ? (
-        <p className="mt-3">
-          <CostLine cost={cost} />
-          <span className="num ml-3 text-xs text-muted">{formatReal(time / state.speed)}</span>
-        </p>
-      ) : (
-        <p className="mt-3 text-xs text-moss">Highest level.</p>
-      )}
-      <div className="mt-3">
-        <Button size="sm" disabled={maxed || reason != null} onClick={() => onBuild(id)}>
-          {maxed ? 'Finished' : `Raise to ${level + 1}`}
-        </Button>
-        {reason ? <p className="mt-2 text-xs text-blood">{reason}</p> : null}
-      </div>
+      <BuildingDetail id={id} onBuild={onBuild} />
     </article>
   )
-}
-
-function effectLine(id: BuildingId, level: number): string {
-  const def = BUILDINGS[id]
-  if (def.production) {
-    const now = productionPerHour(def, level)
-    const next = level >= def.maxLevel ? now : productionPerHour(def, level + 1)
-    return `${formatRate(now)}/h now${level >= def.maxLevel ? '' : ` · ${formatRate(next)}/h next`}`
-  }
-  if (id === 'warehouse') return `Holds ${formatCount(storageCapacity(level))}`
-  if (id === 'farm') return `Feeds ${formatCount(populationCapacity(level))}`
-  if (id === 'wall') return level ? `Defense ×${(COMBAT.wallMultiplierPerLevel ** level).toFixed(2)}` : 'No bonus yet'
-  if (id === 'market') return level ? `${level} merchant${level === 1 ? '' : 's'}` : 'No merchants'
-  if (id === 'headquarters') return 'Each level shortens other construction'
-  if (id === 'rally') return level ? 'Armies can form here' : 'Required before a march'
-  if (id === 'smithy') return level ? `Can research to level ${level}` : 'Research stays locked'
-  return level ? 'In use' : 'Not raised'
 }

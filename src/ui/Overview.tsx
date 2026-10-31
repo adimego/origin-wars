@@ -6,6 +6,7 @@ import { townPopulationUsed } from '@/game/sim/population.ts'
 import { useGame } from './game-context.tsx'
 import { coords, formatCount, formatRate, realLeft, formatReal } from './format.ts'
 import { Panel } from './bits.tsx'
+import { TownScene } from './TownScene.tsx'
 import { Button } from '@/components/ui/button.tsx'
 
 export function Overview() {
@@ -54,6 +55,8 @@ export function Overview() {
           </ul>
         </div>
       ) : null}
+
+      <TownScene />
 
       <div className="grid gap-4 lg:grid-cols-3">
         <Panel title="Fields">

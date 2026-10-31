@@ -56,3 +56,48 @@ select {
 .num {
   font-variant-numeric: tabular-nums;
 }
+
+.town-label,
+.town-level {
+  font-family: Outfit, "Segoe UI", sans-serif;
+  stroke: #16130f;
+  stroke-width: 3px;
+  paint-order: stroke;
+}
+
+.town-label {
+  fill: #f4ecdf;
+  font-size: 12px;
+}
+
+.town-level {
+  fill: #e2b45a;
+  font-size: 10px;
+}
+
+.plot-frame {
+  fill: transparent;
+  stroke: transparent;
+}
+
+.town-plot:hover .plot-frame,
+.town-plot:focus-visible .plot-frame,
+.town-plot[data-active='true'] .plot-frame {
+  stroke: #e2b45a;
+  fill: rgba(226, 180, 90, 0.08);
+}
+
+.town-plot:hover .wall-band,
+.town-plot:focus-visible .wall-band {
+  stroke: #e2b45a;
+}
+
+.town-scaffold {
+  animation: town-scaffold 2.6s ease-in-out infinite;
+}
+
+@keyframes town-scaffold {
+  50% {
+    opacity: 0.45;
+  }
+}
