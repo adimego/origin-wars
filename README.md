@@ -14,20 +14,13 @@ The dev server listens on [http://127.0.0.1:4317](http://127.0.0.1:4317). That p
 
 `npm run build` typechecks and writes a static site to `dist/`. `npm run lint` runs oxlint.
 
-## Deploy on Vercel
+## Deploy on GitHub Pages
 
-The site is a static Vite build. Import the Origin repo and use:
+Pushes to `main` run `.github/workflows/pages.yml`. The workflow uses Node 22, then `npm ci`, `npm test`, and `npm run build`, and publishes `dist` with the official Pages upload and deploy actions.
 
-| Setting | Value |
-| --- | --- |
-| Framework preset | Vite |
-| Root directory | repository root |
-| Build command | `npm run build` |
-| Output directory | `dist` |
-| Install command | default (`npm install`) |
-| Node.js version | 22.x |
+The live site is [https://adimego.github.io/origin-wars/](https://adimego.github.io/origin-wars/). Production builds set Vite's `base` to `/origin-wars/` so scripts, styles, and the favicon load from that project path. `npm run dev` still serves the site root at [http://127.0.0.1:4317](http://127.0.0.1:4317).
 
-No environment variables. `vercel.json` sets the same build command and output directory, and rewrites unknown paths to `index.html`. Assets are emitted from the site root (`/assets/...`).
+The build copies `index.html` to `404.html`. GitHub Pages serves that file for unknown paths, so a direct visit under the project site still loads the app.
 
 ## How a session works
 
