@@ -330,7 +330,7 @@ export function newGame(opts: {
     kind: 'system',
     title: `${home.name} is yours`,
     summary:
-      'Timber, clay, and iron are already coming in. Raise a barracks and blood a company on an abandoned hamlet. To take a town, win the field with a commander or siege engines and hold the camp until the clock runs out. Rival lords keep their own hours. They sleep, they wander off, and they may answer a siege late.',
+      'Timber, clay, and iron are already coming in. Raise a barracks and blood a company on an abandoned hamlet. To take a town, win the field with a commander or siege engines and hold the camp until the clock runs out.',
     townId: home.id,
   })
   return state

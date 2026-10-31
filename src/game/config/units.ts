@@ -103,7 +103,7 @@ export const UNITS: Record<UnitId, UnitDef> = {
   scout: {
     id: 'scout',
     name: 'Scout',
-    blurb: 'Rides ahead. A clean report shows troops, stores, and a lord’s hours.',
+    blurb: 'Rides ahead. A clean report shows troops, buildings, and stores.',
     attack: 0,
     defInfantry: 2,
     defCavalry: 1,

@@ -24,6 +24,26 @@ describe('sieges', () => {
     expect(city).toBeGreaterThan(hamlet * 2)
   })
 
+  it('keeps hamlets short and lets a developed town outlast a night at standard speed', () => {
+    const standard = 20
+    const realMinutes = (gameMs: number) => gameMs / standard / 60_000
+    const hamlet = siegeDurationMs({ hq: 1, wall: 0, points: 8, weight: 0 })
+    const mid = siegeDurationMs({ hq: 6, wall: 6, points: 45, weight: 0 })
+    const developed = siegeDurationMs({ hq: 15, wall: 15, points: 130, weight: 0 })
+    const biggest = siegeDurationMs({ hq: 20, wall: 20, points: 218, weight: 0 })
+    expect(realMinutes(hamlet)).toBeCloseTo(43.2, 5)
+    expect(realMinutes(hamlet)).toBeLessThan(60)
+    expect(realMinutes(mid)).toBeCloseTo(207, 5)
+    expect(realMinutes(mid)).toBeGreaterThan(realMinutes(hamlet))
+    expect(realMinutes(mid)).toBeLessThan(realMinutes(developed))
+    expect(realMinutes(developed)).toBeCloseTo(506, 5)
+    expect(realMinutes(developed)).toBeGreaterThan(8 * 60)
+    expect(biggest).toBe(SIEGE.maxMinutes * 60_000)
+    expect(realMinutes(biggest)).toBe(10 * 60)
+    const blitz = realMinutes(biggest) / (120 / standard)
+    expect(blitz).toBeCloseTo(100, 5)
+  })
+
   it('stays at least 20 real minutes at standard speed, even with the biggest weight cut', () => {
     const standard = 20
     const shortest = siegeDurationMs({ hq: 0, wall: 0, points: 0, weight: 10_000 })

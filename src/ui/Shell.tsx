@@ -39,7 +39,7 @@ const NAV: { id: Screen; label: string; icon: ComponentType<{ className?: string
 ]
 
 export function Shell() {
-  const { state, realNow, screen, setScreen, catchup, dismissCatchup, selectTown, setSpeed, setBotClock, abandon, withdrawSiege, sally, callAid } = useGame()
+  const { state, realNow, screen, setScreen, catchup, dismissCatchup, selectTown, setSpeed, abandon, withdrawSiege, sally, callAid } = useGame()
   const [leaving, setLeaving] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
   if (!state) return null
@@ -119,20 +119,6 @@ export function Shell() {
               </label>
             </TooltipTrigger>
             <TooltipContent>World speed compresses the clock for everyone. It is not a purchase.</TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                className="rounded-md border border-line bg-panel px-2 py-1 text-xs text-parchment"
-                onClick={() => setBotClock(state.botClock === 'compressed' ? 'real' : 'compressed')}
-              >
-                Bots: {state.botClock === 'compressed' ? 'Fast hours' : 'Real hours'}
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>
-              Real hours keep each lord on a wall clock in their time zone. Fast hours compress sleep and reaction delay with the game clock, for testing.
-            </TooltipContent>
           </Tooltip>
           <Button variant="ghost" size="sm" onClick={() => setLeaving(true)}>
             Leave

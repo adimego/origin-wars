@@ -120,7 +120,6 @@ function ReportBody({ report }: { report: Report }) {
                 .join(', ') || 'No garrison.'}
             </p>
           ) : null}
-          {report.scout.habit ? <p>{report.scout.habit}</p> : null}
         </div>
       ) : null}
       {report.trade ? (

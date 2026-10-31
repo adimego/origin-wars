@@ -3,7 +3,7 @@ import { flushSync } from 'react-dom'
 import type { BuildingId, ResourceKey, Resources, UnitId } from '@/game/config/ids.ts'
 import { hashSeed } from '@/game/sim/rng.ts'
 import { clearGame, loadGame, saveGame } from '@/game/sim/persist.ts'
-import { act, advance, callForAid, projectGameTime, sally, setBotClock, setWorldSpeed, summarizeOffline, withdrawSiege } from '@/game/sim/engine.ts'
+import { act, advance, callForAid, projectGameTime, sally, setWorldSpeed, summarizeOffline, withdrawSiege } from '@/game/sim/engine.ts'
 import { cancelLastBuild, enqueueBuilding } from '@/game/sim/buildings.ts'
 import { enqueueRecruit, startResearch } from '@/game/sim/recruit.ts'
 import { exchangeResources, sendArmy, shipResources } from '@/game/sim/commands.ts'
@@ -16,7 +16,6 @@ interface BeginOptions {
   speed: number
   seed: string
   name: string
-  botClock: 'real' | 'compressed'
 }
 
 interface GameApi {
@@ -33,7 +32,6 @@ interface GameApi {
   dismissCatchup: () => void
   selectTown: (townId: string, openOverview?: boolean) => void
   setSpeed: (speed: number) => void
-  setBotClock: (mode: 'real' | 'compressed') => void
   build: (buildingId: BuildingId) => string | null
   cancelBuild: () => string | null
   recruit: (unitId: UnitId, count: number) => string | null
@@ -122,9 +120,9 @@ export function GameProvider({ children }: { children: ReactNode }) {
     catchup,
     setScreen,
     enter: () => setEntered(true),
-    begin: ({ speed, seed, name, botClock }) => {
+    begin: ({ speed, seed, name }) => {
       const numeric = seed.trim() ? hashSeed(seed.trim()) : hashSeed(`${Date.now()}-${Math.random()}`)
-      const next = newGame({ speed, seed: numeric, realNow: Date.now(), playerName: name, botClock })
+      const next = newGame({ speed, seed: numeric, realNow: Date.now(), playerName: name })
       setState(next)
       saveGame(next)
       setCatchup(null)
@@ -151,10 +149,6 @@ export function GameProvider({ children }: { children: ReactNode }) {
     },
     setSpeed: (speed) => {
       setState((current) => (current ? setWorldSpeed(current, speed, Date.now()) : current))
-      setRealNow(Date.now())
-    },
-    setBotClock: (mode) => {
-      setState((current) => (current ? setBotClock(current, mode, Date.now()) : current))
       setRealNow(Date.now())
     },
     build: (buildingId) => run((draft) => {

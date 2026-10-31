@@ -242,52 +242,6 @@ export function sleepLengthHours(schedule: BotSchedule): number {
   return sleepDuration(schedule.sleepStartHour, schedule.sleepEndHour)
 }
 
-export function formatClock(hour: number): string {
-  const whole = Math.floor(hour)
-  const mins = Math.round((hour - whole) * 60) % 60
-  const hh = ((whole % 24) + 24) % 24
-  return `${String(hh).padStart(2, '0')}:${String(mins).padStart(2, '0')}`
-}
-
-export function localClock(gameTimeMs: number, offsetHours: number): string {
-  return formatClock(localHour(gameTimeMs, offsetHours))
-}
-
-export function habitBlurb(schedule: BotSchedule): string {
-  const manner =
-    schedule.chronotype === 'early_bird'
-      ? 'an early riser'
-      : schedule.chronotype === 'night_owl'
-        ? 'a night owl'
-        : 'someone who keeps daylight hours'
-  const sleep = `${formatClock(schedule.sleepStartHour)}–${formatClock(schedule.sleepEndHour)}`
-  const shift =
-    Math.abs(schedule.timezoneOffsetHours) < 0.25
-      ? 'Their clock matches UTC.'
-      : `Their clock is UTC${schedule.timezoneOffsetHours > 0 ? '+' : ''}${schedule.timezoneOffsetHours}.`
-  return `Keeps the hours of ${manner}. Usually asleep ${sleep}, real time, not the sped-up realm clock. ${shift}`
-}
-
-export function presence(
-  owner: Owner,
-  gameTime: number,
-): { phase: Phase; label: string; local: string } | null {
-  if (!owner.schedule) return null
-  const phase = phaseAt(owner.schedule, gameTime)
-  const local = localClock(gameTime, owner.schedule.timezoneOffsetHours)
-  let label = 'Up, not at their maps'
-  if (phase === 'sleep') label = 'Asleep'
-  else if (
-    owner.lastLoginAt != null &&
-    owner.sessionEndsAt != null &&
-    gameTime >= owner.lastLoginAt &&
-    gameTime < owner.sessionEndsAt
-  ) {
-    label = 'At the table'
-  } else if (phase === 'busy') label = 'Busy. Checks in rarely.'
-  return { phase, label, local }
-}
-
 /** Schedule-clock "now" for the current game instant. Uses the step anchor while the sim is replaying. */
 export function currentScheduleNow(
   state: Pick<GameState, 'botClock' | 'gameTime' | 'lastRealMs' | 'clockAnchor'>,
@@ -317,12 +271,6 @@ export function considerAlertWake(state: GameState, owner: Owner, deadlineSchedu
   owner.nextLoginAt = wakeAt
   owner.wokenByAlert = true
   return true
-}
-
-export function alarmBlurb(wakeOnAlert: number): string {
-  if (wakeOnAlert >= 0.8) return 'Keeps alarms on.'
-  if (wakeOnAlert >= 0.35) return 'Sometimes wakes for alarms.'
-  return 'Sleeps through alarms.'
 }
 
 export function presetSleep(chronotype: Chronotype): { start: number; end: number } {

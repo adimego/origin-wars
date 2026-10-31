@@ -1,6 +1,6 @@
 # Origin Wars
 
-A browser strategy game in the vein of Tribal Wars. You hold a town on a shared map, grow its economy on a real clock, recruit companies, and march them at rivals who keep human hours. There is no premium currency and no way to buy time.
+A browser strategy game in the vein of Tribal Wars. You hold a town on a shared map, grow its economy on a real clock, recruit companies, and march them at other lords. There is no premium currency and no way to buy time.
 
 ## Run it
 
@@ -43,9 +43,9 @@ Their day runs on **real wall-clock time**, not the sped-up game clock. A lord w
 
 Catch-up after you close the tab steps both clocks together. A login due at a real timestamp is applied at the game time that wall clock maps to under the current world speed. Changing speed does not move their bedtime.
 
-**Bot hours: Real hours** is the default. **Fast hours** (on by default for a Blitz campaign, and available as a header toggle) runs the same schedule on the game clock so you can watch them act without waiting out a night. The choice is stored in the save.
+None of that is shown to the player. The map names a town and its lord, and it shows points. A scout report lists troops, buildings, and resources. It does not list a personality, a difficulty, a sleep window, a time zone, a chronotype, whether they are awake, or whether they keep alarms on. The player learns how a lord behaves by watching what they do.
 
-Their current presence (asleep, busy, at the table) is visible on the map, using their real local time, along with whether they keep alarms on. A full scout report adds the sleep window, the UTC offset, and that same alarm habit.
+Schedules stay on the sim clock (`botClock: 'real'` by default). Tests can set `botClock: 'compressed'` so the same intervals run on the game clock. The client does not offer that switch.
 
 All of the numbers live in `src/game/config/ai.ts`.
 
@@ -87,7 +87,7 @@ Production at level n is `base × growth^(n-1)` per game hour. Build cost and bu
 npm test
 ```
 
-Vitest covers resource production and the storage cap, build times and the queue, recruit timers, combat (including the wall, rams, catapults, and scouts), sieges (duration, investing, relief, hampered production, a sleeping defender missing the clock), and the bot schedule: sleep versus work, irregular logins, reaction delay, missed attacks, wake-on-alert (casual, hardcore, in-between, groggy delay, back to sleep, aid calls), and personality differences. One case generates a realm and advances it an hour.
+Vitest covers resource production and the storage cap, build times and the queue, recruit timers, combat (including the wall, rams, catapults, and scouts), sieges (the 20-minute floor, hamlet / mid-size / developed / cap durations, investing, relief, hampered production, a sleeping defender missing a short clock), and the bot schedule: sleep versus work, irregular logins, reaction delay, missed attacks, wake-on-alert, and a full scout that stays limited to troops, buildings, and resources. One case generates a realm and advances it an hour.
 
 ## Siege numbers
 
@@ -95,11 +95,11 @@ All of these live in `SIEGE` inside `src/game/config/world.ts`. Times are game-m
 
 | Knob | Value |
 | --- | --- |
-| Base duration | 622 min |
-| Per headquarters level | +111 min |
-| Per wall level | +156 min |
-| Per town point | +13.3 min |
-| Clamp | 400–4000 min |
+| Base duration | 480 min |
+| Per headquarters level | +160 min |
+| Per wall level | +240 min |
+| Per town point | +28 min |
+| Clamp | 400–12000 min |
 | Weight | ram 1, catapult 2, commander 4 |
 | Shorten | 2.5% per weight point, capped at 50% |
 | Minimum weight to invest | 3 (one commander, or three rams, or a catapult and a ram) |
@@ -108,13 +108,22 @@ All of these live in `SIEGE` inside `src/game/config/world.ts`. Times are game-m
 | New build and train time | ×2.5 |
 | Aid radius | 14 fields |
 
-At Standard (20×), the floor is 20 real minutes and still holds after the 50% siege-weight cut. A level-1 hamlet with 8 points and no wall is about 42 real minutes with no engines, and about 38 with one commander. A town with headquarters 8, wall 8, and 40 points is about 2 hours 45 minutes, or about 1 hour 40 minutes if the camp has 16 weight. The cap is 3 hours 20 minutes. Blitz (120×) is six times faster, so the same floor is about 3 real minutes 20 seconds.
+At Standard (20×), divide game-minutes by 20. These four are with no siege weight. A heavy camp can cut the raw duration by up to half, and the result never drops below the 20-minute floor.
 
-Chance a bot who could raid will invest instead, if they have the weight: steward 8%, raider 38%, castellan 6%, claimant 72%. Chance they ride to help someone else’s call: steward 40%, raider 10%, castellan 72%, claimant 22%.
+| Town | Makeup | Real time at Standard |
+| --- | --- | --- |
+| Hamlet | Headquarters 1, no wall, 8 points | 43.2 minutes (21.6 after the full weight cut) |
+| Mid-size | Headquarters 6, wall 6, 45 points | 3 hours 27 minutes |
+| Developed | Headquarters 15, wall 15, 130 points | 8 hours 26 minutes |
+| Cap, fully built | Headquarters 20, wall 20, 218 points | 10 hours |
 
-Because bot hours are real, a full night is about eight real hours and every current siege is shorter than that (20 minutes to 3 hours 20 minutes at Standard). A casual lord who is already asleep misses a siege that ends before the natural wake. A hardcore lord can sit up, but only when the groggy delay (4–22 real minutes, plus a minute or two to give the order) still lands before the camp falls, and a relief march from a neighbor still has to fit after that. The longest aid-radius march is about six real minutes. A 20-minute hamlet siege is answerable for a light sleeper and not for a slow one. An eight-hour night is longer than the siege cap, so a lord who does not wake still loses the town. Fast hours are the way to exercise this without waiting out the night.
+Blitz (120×) is six times faster, so the same floor is 3 minutes 20 seconds and the same cap is 1 hour 40 minutes.
 
-Recommendation: leave the 20-minute floor where it is. If taking towns from sleeping lords feels too easy, raise only the upper siege durations so a large town can outlast a night (about 8–10 real hours at Standard) while hamlets stay short. Wake-on-alert already saves the lords who keep their alarms on.
+A fully built town’s raw duration sits above the cap, so a light camp (one commander, a 10% cut) still lasts the full 10 hours. A heavy camp pulls it down: 20% off is about 9 hours 43 minutes, and the full 50% cut is about 6 hours 5 minutes. A developed town at 8 hours 26 minutes outlasts a typical night unless the camp is heavy enough to cut it shorter. A hamlet does not.
+
+Chance a bot who could raid will invest instead, if they have the weight: steward 8%, raider 38%, castellan 6%, claimant 72%. Chance they ride to help someone else’s call: steward 40%, raider 10%, castellan 72%, claimant 22%. The player is not told which is which.
+
+Because bot hours are real, a full night is about eight real hours. A hamlet siege is over long before morning. A developed town can still be holding when the night ends. A lord who wakes for the alarm still needs the groggy delay (4–22 real minutes, plus a minute or two to give the order) and the march to fit before the camp falls. The longest aid-radius march is about six real minutes.
 
 ## Known gaps
 

@@ -1,9 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { CHRONOTYPE_LABEL, DIFFICULTY_LABEL, PERSONALITY_LABEL } from '@/game/config/ai.ts'
 import { UNIT_IDS } from '@/game/config/ids.ts'
 import { UNITS } from '@/game/config/units.ts'
 import { distance } from '@/game/sim/movement.ts'
-import { alarmBlurb, botScheduleNow, presence } from '@/game/sim/schedule.ts'
 import { terrainAt, type Terrain } from '@/game/sim/terrain.ts'
 import { townPoints } from '@/game/sim/formulas.ts'
 import type { Town } from '@/game/sim/types.ts'
@@ -95,7 +93,7 @@ export function MapScreen() {
             onOrder={(mission) => setOrder(mission)}
           />
         ) : (
-          <p className="text-sm text-muted">Choose a town. Abandoned hamlets are the usual first raid. Rival lords keep their own hours.</p>
+          <p className="text-sm text-muted">Choose a town. Abandoned hamlets are the usual first raid.</p>
         )}
       </aside>
       {order && focus ? (
@@ -126,12 +124,11 @@ function TownPanel({
   home: Town
   onOrder: (mission: OrderMission) => void
 }) {
-  const { state, realNow, gameNow } = useGame()
+  const { state } = useGame()
   if (!state) return null
   const owner = state.owners.find((entry) => entry.id === town.ownerId)
   const mine = town.ownerId === state.playerId
   const wild = owner?.kind === 'barbarian'
-  const here = owner && state ? presence(owner, botScheduleNow(state, realNow, gameNow)) : null
   const scout = state.reports.find((report) => report.ownerId === state.playerId && report.scout?.townId === town.id && report.scout.success)?.scout
   const troops = UNIT_IDS.filter((id) => town.units[id] > 0)
 
@@ -141,18 +138,7 @@ function TownPanel({
         <h2 className="font-display text-xl text-brass-2">{town.name}</h2>
         <p className="num text-xs text-brass">{coords(town.x, town.y)} · {distance(home, town).toFixed(1)} fields</p>
       </div>
-      <p>
-        {mine ? 'You' : owner?.name ?? 'Abandoned'}
-        {owner?.personality ? ` · ${PERSONALITY_LABEL[owner.personality]}` : ''}
-        {owner?.difficulty ? ` · ${DIFFICULTY_LABEL[owner.difficulty]}` : ''}
-      </p>
-      {owner?.schedule && here ? (
-        <p className="text-muted">
-          {here.label}. Their clock {here.local}.
-          {owner.schedule.chronotype ? ` ${CHRONOTYPE_LABEL[owner.schedule.chronotype]}.` : ''}
-          {owner.traits ? ` ${alarmBlurb(owner.traits.wakeOnAlert)}` : ''}
-        </p>
-      ) : null}
+      <p>{mine ? 'You' : owner?.name ?? 'Abandoned'}</p>
       <p className="text-muted">{townPoints(town)} points</p>
       {wild ? (
         troops.length === 0 ? (
@@ -173,7 +159,6 @@ function TownPanel({
           {state.sieges.some((siege) => siege.townId === town.id) ? ' · siege camp outside' : ''}
         </p>
       ) : null}
-      {scout?.habit ? <p className="text-xs text-muted">{scout.habit}</p> : null}
       <div className="flex flex-wrap gap-2 pt-1">
         {!mine ? (
           <Button size="sm" variant="secondary" onClick={() => onOrder('attack')}>

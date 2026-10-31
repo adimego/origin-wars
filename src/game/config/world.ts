@@ -81,17 +81,18 @@ export const COMBAT = {
  * until the clock runs out. All times are game-minutes.
  *
  * At Standard speed (20×), 400 game-minutes is 20 real minutes. minMinutes
- * is that floor and still applies after the maximum siege-weight cut.
- * The other terms are the old curve scaled by 400/18, so a developed town
- * runs for a few real hours and Blitz (120×) stays six times faster.
+ * is that floor and still applies after the maximum siege-weight cut, so a
+ * hamlet stays short. The per-level terms climb from there: a developed town
+ * outlasts a night, and the cap is 10 real hours (12000 game-minutes) at
+ * Standard. Blitz (120×) stays six times faster.
  */
 export const SIEGE = {
-  baseMinutes: 622,
-  minutesPerHq: 111,
-  minutesPerWall: 156,
-  minutesPerPoint: 13.3,
+  baseMinutes: 480,
+  minutesPerHq: 160,
+  minutesPerWall: 240,
+  minutesPerPoint: 28,
   minMinutes: 400,
-  maxMinutes: 4000,
+  maxMinutes: 12000,
   /** Each point of siege weight shortens the clock by this fraction. */
   shortenPerWeight: 0.025,
   maxShorten: 0.5,

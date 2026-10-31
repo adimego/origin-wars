@@ -209,7 +209,6 @@ export interface ScoutView {
   resources: Resources | null
   buildings: Record<BuildingId, number> | null
   units: UnitCounts | null
-  habit: string | null
   points: number | null
 }
 

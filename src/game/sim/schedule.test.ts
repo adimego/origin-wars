@@ -8,7 +8,6 @@ import { sendArmy } from './commands.ts'
 import { makeRng } from './rng.ts'
 import { zeroUnit } from './defaults.ts'
 import {
-  alarmBlurb,
   considerAlertWake,
   currentScheduleNow,
   evaluateIncomingReaction,
@@ -348,6 +347,8 @@ describe('bot schedules', () => {
     const next = advance(state, 60 * 60 * 1000)
     expect(next.gameTime).toBeGreaterThan(state.gameTime)
     expect(next.towns.length).toBe(state.towns.length)
+    const intro = state.reports.find((report) => report.ownerId === state.playerId && report.kind === 'system')
+    expect(intro?.summary ?? '').not.toMatch(/sleep|alarm|chronotype|time zone|hours/i)
   })
 
   it('sometimes picks a worse building than the one a careful steward would', () => {
@@ -633,8 +634,48 @@ describe('wake on alert', () => {
     expect(Math.min(...raiders)).toBeLessThan(0.2)
     expect(Math.max(...raiders)).toBeGreaterThan(0.8)
     expect(new Set(farmers).size).toBeGreaterThan(20)
-    expect(alarmBlurb(0.9)).toMatch(/alarms on/)
-    expect(alarmBlurb(0.5)).toMatch(/Sometimes/)
-    expect(alarmBlurb(0.1)).toMatch(/Sleeps through/)
+  })
+
+  it('gives a full scout troops, buildings, and resources, and nothing about the lord', () => {
+    const state = makeState()
+    state.owners.push(
+      makeOwner({
+        id: 'bot',
+        kind: 'bot',
+        name: 'Nessa Crowe',
+        personality: 'defender',
+        difficulty: 'hard',
+        schedule: daySchedule(),
+        traits: focusedTraits({ wakeOnAlert: 1 }),
+      }),
+    )
+    state.towns.push(
+      makeTown({
+        id: 'home',
+        ownerId: 'player',
+        buildings: starterBuildings(),
+        units: zeroUnit('scout', 20),
+      }),
+      makeTown({
+        id: 'theirs',
+        ownerId: 'bot',
+        x: 0,
+        y: 1,
+        buildings: starterBuildings({ wall: 3, barracks: 2 }),
+        units: zeroUnit('spear', 0),
+        resources: { wood: 180, clay: 40, iron: 25 },
+      }),
+    )
+    expect(sendArmy(state, 'home', 'theirs', 'scout', zeroUnit('scout', 20), null)).toBeNull()
+    const after = atGame(state, state.movements[0]!.arrivesAt)
+    const report = after.reports.find((entry) => entry.kind === 'scout' && entry.ownerId === 'player')
+    expect(report?.scout?.units).toBeTruthy()
+    expect(report?.scout?.buildings?.wall).toBe(3)
+    expect(report?.scout?.resources?.wood).toBeGreaterThan(180)
+    expect(report?.scout?.resources?.clay).toBeGreaterThan(0)
+    expect(report?.scout?.resources?.iron).toBeGreaterThan(0)
+    expect(report?.scout).not.toHaveProperty('habit')
+    const shown = `${report?.title ?? ''} ${report?.summary ?? ''} ${JSON.stringify(report?.scout ?? {})}`
+    expect(shown).not.toMatch(/asleep|alarm|chronotype|time zone|early riser|night owl|keeps alarms|castellan|defender|hard/i)
   })
 })

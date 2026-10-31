@@ -8,7 +8,7 @@ import { addUnits, cloneUnits, emptyRecruitQueues, emptyResources, emptyUnits, h
 import { storageCapacity, townPoints } from './formulas.ts'
 import { distance, travelMs } from './movement.ts'
 import { makeRng } from './rng.ts'
-import { alarmBlurb, considerAlertWake, currentScheduleNow, gameInstantToSchedule, habitBlurb, scheduleInstantToGame, scheduleNowFromGame } from './schedule.ts'
+import { considerAlertWake, currentScheduleNow, gameInstantToSchedule, scheduleInstantToGame, scheduleNowFromGame } from './schedule.ts'
 import { canInvest, durationForTown, holdsCamp, productionFactorFor, siegeOn, stretchLabor } from './siege.ts'
 import { completeRecruit, completeResearch } from './recruit.ts'
 import { floorResources, grantResources, syncAllResources, syncTownResources } from './resources.ts'
@@ -573,11 +573,6 @@ function arrive(state: GameState, movement: Movement): void {
       attackers: { units: movement.units, research: origin.research },
       defenders: { units: defenders, research: target.research },
     })
-    const owner = ownerById(state, target.ownerId)
-    const habit =
-      result.revealed === 'full' && owner?.schedule
-        ? `${habitBlurb(owner.schedule)}${owner.traits ? ` ${alarmBlurb(owner.traits.wakeOnAlert)}` : ''}`
-        : null
     const camp = siegeOn(state, target.id)
     const scout = {
       success: result.success,
@@ -589,7 +584,6 @@ function arrive(state: GameState, movement: Movement): void {
       resources: result.revealed === 'none' ? null : floorResources(target.resources),
       buildings: result.revealed === 'none' ? null : { ...target.buildings },
       units: result.revealed === 'full' ? cloneUnits(defenders) : null,
-      habit,
       points: result.revealed === 'none' ? null : townPoints(target),
     }
     pushReport(state, {
@@ -1030,7 +1024,7 @@ export function callForAid(state: GameState, townId: string): string | null {
     unread: true,
     kind: 'siege',
     title: `Aid requested for ${town.name}`,
-    summary: 'Nearby lords hear of it when they next sit down. A few keep alarms on and may sit up groggy. The rest answer when they wake, or not at all.',
+    summary: 'Riders have gone out to ask nearby towns for help.',
     townId,
     siegeEndsAt: siege.endsAt,
   })
