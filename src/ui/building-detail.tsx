@@ -21,10 +21,12 @@ export function BuildingDetail({
   id,
   onBuild,
   titleAs = 'h3',
+  label,
 }: {
   id: BuildingId
   onBuild: (id: BuildingId) => void
   titleAs?: 'h3' | 'dialog'
+  label?: string
 }) {
   const { state } = useGame()
   if (!state) return null
@@ -45,7 +47,7 @@ export function BuildingDetail({
     <div>
       {titleAs === 'dialog' ? <DialogDescription className="sr-only">{def.blurb}</DialogDescription> : null}
       <div className="flex items-baseline justify-between gap-3 pr-6">
-        <Title className="font-medium">{def.name}</Title>
+        <Title className="font-medium">{label ?? def.name}</Title>
         <span className="num text-sm text-brass">Lv {level}</span>
       </div>
       <p className="mt-1 text-sm text-muted">{def.blurb}</p>

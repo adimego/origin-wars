@@ -2,16 +2,19 @@ import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { BUILDINGS } from '@/game/config/buildings.ts'
 import { BUILDING_IDS, type BuildingId } from '@/game/config/ids.ts'
 import { townPoints } from '@/game/sim/formulas.ts'
+import type { TrainBuilding } from '@/game/config/ids.ts'
 import { Dialog, DialogContent } from '@/components/ui/dialog.tsx'
 import { BuildingDetail } from './building-detail.tsx'
+import { MarketDesk, RallyPanel, SmithyPanel, YardPanel } from './building-use.tsx'
 import { paintTown } from './town-art.ts'
 import { useGame } from './game-context.tsx'
 import { CENTER, SCENE_H, SCENE_W, WALL_R, buildingPlots } from './town-layout.ts'
+import { townPanel } from './town-panels.ts'
 
 const PLOTS = buildingPlots()
 
 export function TownScene() {
-  const { state, build } = useGame()
+  const { state, build, setScreen } = useGame()
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [openId, setOpenId] = useState<BuildingId | null>(null)
   const [hoverId, setHoverId] = useState<BuildingId | null>(null)
@@ -103,7 +106,27 @@ export function TownScene() {
         }}
       >
         <DialogContent>
-          {openId ? <BuildingDetail id={openId} titleAs="dialog" onBuild={(id) => setNote(build(id))} /> : null}
+          {openId && townPanel(openId) === 'research' ? <SmithyPanel /> : null}
+          {openId && townPanel(openId) === 'recruit' ? <YardPanel building={openId as TrainBuilding} /> : null}
+          {openId && townPanel(openId) === 'market' ? <MarketDesk heading="dialog" /> : null}
+          {openId && townPanel(openId) === 'rally' ? (
+            <RallyPanel
+              onOpenMap={() => {
+                setOpenId(null)
+                setScreen('map')
+              }}
+            />
+          ) : null}
+          {openId ? (
+            <div className={townPanel(openId) ? 'mt-4 border-t border-line pt-4' : ''}>
+              <BuildingDetail
+                id={openId}
+                titleAs={townPanel(openId) ? 'h3' : 'dialog'}
+                label={townPanel(openId) ? 'Construction' : undefined}
+                onBuild={(id) => setNote(build(id))}
+              />
+            </div>
+          ) : null}
           {note ? <p className="mt-3 text-sm text-blood">{note}</p> : null}
         </DialogContent>
       </Dialog>
