@@ -293,14 +293,15 @@ function Plot({
 function Scaffold() {
   return (
     <g className="town-scaffold" pointerEvents="none">
-      <line x1="-42" y1="-72" x2="-42" y2="10" stroke="#d2ae62" strokeWidth="2" />
-      <line x1="42" y1="-72" x2="42" y2="10" stroke="#d2ae62" strokeWidth="2" />
-      <line x1="-42" y1="-50" x2="42" y2="-50" stroke="#d2ae62" strokeWidth="2" />
-      <line x1="-42" y1="-24" x2="42" y2="-24" stroke="#d2ae62" strokeWidth="2" />
-      <line x1="-36" y1="-72" x2="-22" y2="-50" stroke="#8a5a32" strokeWidth="1.5" />
-      <line x1="36" y1="-72" x2="22" y2="-50" stroke="#8a5a32" strokeWidth="1.5" />
-      <line x1="-36" y1="-50" x2="-22" y2="-24" stroke="#8a5a32" strokeWidth="1.5" />
-      <line x1="36" y1="-50" x2="22" y2="-24" stroke="#8a5a32" strokeWidth="1.5" />
+      <line x1="-48" y1="-78" x2="-48" y2="16" stroke="#3a2418" strokeWidth="3.5" />
+      <line x1="48" y1="-78" x2="48" y2="16" stroke="#3a2418" strokeWidth="3.5" />
+      <line x1="-48" y1="-60" x2="48" y2="-60" stroke="#e2b45a" strokeWidth="3" />
+      <line x1="-48" y1="-34" x2="48" y2="-34" stroke="#e2b45a" strokeWidth="3" />
+      <line x1="-48" y1="-8" x2="48" y2="-8" stroke="#e2b45a" strokeWidth="3" />
+      <line x1="-42" y1="-78" x2="-30" y2="-60" stroke="#8a5a32" strokeWidth="2" />
+      <line x1="42" y1="-78" x2="30" y2="-60" stroke="#8a5a32" strokeWidth="2" />
+      <line x1="-42" y1="-60" x2="-30" y2="-34" stroke="#8a5a32" strokeWidth="2" />
+      <line x1="42" y1="-60" x2="30" y2="-34" stroke="#8a5a32" strokeWidth="2" />
     </g>
   )
 }
